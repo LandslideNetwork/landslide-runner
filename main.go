@@ -5,16 +5,14 @@ import (
 	_ "embed"
 	"fmt"
 	"go/build"
-	"io"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/ava-labs/avalanche-network-runner/local"
 	"github.com/ava-labs/avalanche-network-runner/network"
 	"github.com/ava-labs/avalanchego/config"
 	"github.com/ava-labs/avalanchego/utils/logging"
+	"github.com/urfave/cli/v2"
 
 	"go.uber.org/zap"
 )
@@ -52,70 +50,90 @@ func main() {
 	os.RemoveAll(workDir)
 	os.MkdirAll(workDir, 0777)
 
-	if err := run(log, binaryPath, workDir); err != nil {
+	app := &cli.App{
+		Name:  "main",
+		Usage: "runNodes landslidevm tests",
+		Commands: []*cli.Command{
+			{
+				Name:  "run",
+				Usage: "spin up network and deploy landslidevm as a subnet",
+				Action: func(cCtx *cli.Context) error {
+					nw, err := createNetwork(log, binaryPath, workDir)
+					if err != nil {
+						fmt.Println(err)
+						os.Exit(1)
+					}
+					_, err = runNodes(log, binaryPath, nw)
+					if err != nil {
+						log.Fatal("error starting nodes", zap.Error(err))
+						return cli.Exit("exiting", 1)
+					}
+
+					gracefulShutdown(nw, log)
+					return nil
+				},
+			},
+			{
+				Name:  "e2e",
+				Usage: "spin up landslide subnet and run end-to-end tests",
+				Subcommands: []*cli.Command{
+					{
+						Name:  "kvstore",
+						Usage: "kvstore end-to-end tests",
+						Action: func(cCtx *cli.Context) error {
+							log.Info("not implemented yet")
+							return nil
+						},
+					},
+					{
+						Name:  "wasm",
+						Usage: "wasm end-to-end tests",
+						Action: func(cCtx *cli.Context) error {
+							log.Info("not implemented yet")
+							return nil
+						},
+					},
+					{
+						Name:  "osmosis",
+						Usage: "osmosis end-to-end tests",
+						Action: func(cCtx *cli.Context) error {
+							log.Info("not implemented yet")
+							return nil
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := app.Run(os.Args); err != nil {
 		log.Fatal("fatal error", zap.Error(err))
 		os.Exit(1)
 	}
 }
 
-func run(log logging.Logger, binaryPath string, workDir string) error {
-	// Create the network
-	nwConfig, err := local.NewDefaultConfig(fmt.Sprintf("%s/avalanchego", binaryPath))
-	if err != nil {
-		return err
-	}
-
-	nwConfig.Flags["log-level"] = "INFO"
-
-	// adjust avalanche port to not conflict with default ports 9650
-	for _, cfg := range nwConfig.NodeConfigs {
-		httpPort := cfg.Flags[config.HTTPPortKey].(int)
-		stakingPort := cfg.Flags[config.StakingPortKey].(int)
-
-		cfg.Flags[config.HTTPPortKey] = httpPort + 100
-		cfg.Flags[config.StakingPortKey] = stakingPort + 100
-	}
-
-	nw, err := local.NewNetwork(log, nwConfig, workDir, "", true, false, true)
-	if err != nil {
-		return err
-	}
-	defer func() { // Stop the network when this function returns
-		if err := nw.Stop(context.Background()); err != nil {
-			log.Info("error stopping network", zap.Error(err))
-		}
-	}()
-
-	// When we get a SIGINT or SIGTERM, stop the network and close [closedOnShutdownCh]
-	signalsChan := make(chan os.Signal, 1)
-	signal.Notify(signalsChan, syscall.SIGINT)
-	signal.Notify(signalsChan, syscall.SIGTERM)
-	closedOnShutdownCh := make(chan struct{})
-	go func() {
-		shutdownOnSignal(log, nw, signalsChan, closedOnShutdownCh)
-	}()
-
+func runNodes(log logging.Logger, binaryPath string, nw network.Network) ([]string, error) {
 	// Wait until the nodes in the network are ready
 	if err := await(nw, log, healthyTimeout); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Add some chain
 	nodeNames, err := nw.GetNodeNames()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for i := range nodeNames {
 		node, err := nw.GetNode(nodeNames[i])
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if _, err := copy(
 			fmt.Sprintf("%s/plugins/%s", binaryPath, subnetFileName),
 			fmt.Sprintf("%s/plugins/%s", node.GetDataDir(), subnetFileName),
 		); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -131,87 +149,48 @@ func run(log logging.Logger, binaryPath string, workDir string) error {
 		},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Wait until the nodes in the network are ready
 	if err := await(nw, log, healthyTimeout); err != nil {
-		return err
+		return nil, err
 	}
 
 	rpcUrls := make([]string, len(nodeNames))
 	for i := range nodeNames {
 		node, err := nw.GetNode(nodeNames[i])
 		if err != nil {
-			return err
+			return nil, err
 		}
 		rpcUrls[i] = fmt.Sprintf("http://127.0.0.1:%d/ext/bc/%s/rpc", node.GetAPIPort(), chains[0])
 		log.Info("subnet rpc url", zap.String("node", nodeNames[i]), zap.String("url", rpcUrls[i]))
 	}
 
-	log.Info("Network will run until you CTRL + C to exit...")
-	// Wait until done shutting down network after SIGINT/SIGTERM
-	<-closedOnShutdownCh
-	return nil
+	return rpcUrls, nil
 }
 
-// Blocks until a signal is received on [signalChan], upon which
-// [n.Stop()] is called. If [signalChan] is closed, does nothing.
-// Closes [closedOnShutdownChan] amd [signalChan] when done shutting down network.
-// This function should only be called once.
-func shutdownOnSignal(
-	log logging.Logger,
-	n network.Network,
-	signalChan chan os.Signal,
-	closedOnShutdownChan chan struct{},
-) {
-	sig := <-signalChan
-	log.Info("got OS signal", zap.Stringer("signal", sig))
-	if err := n.Stop(context.Background()); err != nil {
-		log.Info("error stopping network", zap.Error(err))
-	}
-	signal.Reset()
-	close(signalChan)
-	close(closedOnShutdownChan)
-}
-
-func await(nw network.Network, log logging.Logger, timeout time.Duration) error {
-	// Wait until the nodes in the network are ready
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	log.Info("waiting for all nodes to report healthy...")
-	err := nw.Healthy(ctx)
-	if err == nil {
-		log.Info("all nodes healthy...")
-	}
-	return err
-}
-
-func copy(src, dst string) (int64, error) {
-	sourceFileStat, err := os.Stat(src)
+func createNetwork(log logging.Logger, binaryPath string, workDir string) (network.Network, error) {
+	nwConfig, err := local.NewDefaultConfig(fmt.Sprintf("%s/avalanchego", binaryPath))
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	if !sourceFileStat.Mode().IsRegular() {
-		return 0, fmt.Errorf("%s is not a regular file", src)
+	nwConfig.Flags["log-level"] = "INFO"
+
+	// adjust avalanche port to not conflict with default ports 9650
+	for _, cfg := range nwConfig.NodeConfigs {
+		httpPort := cfg.Flags[config.HTTPPortKey].(int)
+		stakingPort := cfg.Flags[config.StakingPortKey].(int)
+
+		cfg.Flags[config.HTTPPortKey] = httpPort + 100
+		cfg.Flags[config.StakingPortKey] = stakingPort + 100
 	}
 
-	source, err := os.Open(src)
+	nw, err := local.NewNetwork(log, nwConfig, workDir, "", true, false, true)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	defer source.Close()
 
-	destination, err := os.Create(dst)
-	if err != nil {
-		return 0, err
-	}
-	defer destination.Close()
-
-	nBytes, err := io.Copy(destination, source)
-	if err := os.Chmod(dst, 0777); err != nil {
-		return 0, err
-	}
-	return nBytes, err
+	return nw, err
 }
