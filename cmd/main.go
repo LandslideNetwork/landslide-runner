@@ -15,6 +15,8 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"go.uber.org/zap"
+
+	"github.com/consideritdone/landslide-runner/internal"
 )
 
 const (
@@ -69,7 +71,7 @@ func main() {
 						return cli.Exit("exiting", 1)
 					}
 
-					gracefulShutdown(nw, log)
+					internal.GracefulShutdown(nw, log)
 					return nil
 				},
 			},
@@ -114,7 +116,7 @@ func main() {
 
 func runNodes(log logging.Logger, binaryPath string, nw network.Network) ([]string, error) {
 	// Wait until the nodes in the network are ready
-	if err := await(nw, log, healthyTimeout); err != nil {
+	if err := internal.Await(nw, log, healthyTimeout); err != nil {
 		return nil, err
 	}
 
@@ -129,7 +131,7 @@ func runNodes(log logging.Logger, binaryPath string, nw network.Network) ([]stri
 		if err != nil {
 			return nil, err
 		}
-		if _, err := copy(
+		if _, err := internal.Copy(
 			fmt.Sprintf("%s/plugins/%s", binaryPath, subnetFileName),
 			fmt.Sprintf("%s/plugins/%s", node.GetDataDir(), subnetFileName),
 		); err != nil {
@@ -153,7 +155,7 @@ func runNodes(log logging.Logger, binaryPath string, nw network.Network) ([]stri
 	}
 
 	// Wait until the nodes in the network are ready
-	if err := await(nw, log, healthyTimeout); err != nil {
+	if err := internal.Await(nw, log, healthyTimeout); err != nil {
 		return nil, err
 	}
 

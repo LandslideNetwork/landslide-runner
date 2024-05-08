@@ -11,5 +11,5 @@ BASEDIR=/tmp/e2e-test-landslide AVALANCHEGO_BUILD_PATH=/tmp/e2e-test-landslide/a
 Then execute:
 
 ```shell
-go run main.go
+go run ./cmd/main.go
 ```

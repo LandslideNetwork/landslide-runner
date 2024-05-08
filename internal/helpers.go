@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 // [n.Stop()] is called. If [signalChan] is closed, does nothing.
 // Closes [closedOnShutdownChan] amd [signalChan] when done shutting down network.
 // This function should only be called once.
-func gracefulShutdown(nw network.Network, log logging.Logger) {
+func GracefulShutdown(nw network.Network, log logging.Logger) {
 	signalsChan := make(chan os.Signal, 1)
 	closedOnShutdownCh := make(chan struct{})
 	defer func() {
@@ -46,7 +46,7 @@ func gracefulShutdown(nw network.Network, log logging.Logger) {
 }
 
 // Wait until the nodes in the network are ready
-func await(nw network.Network, log logging.Logger, timeout time.Duration) error {
+func Await(nw network.Network, log logging.Logger, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	log.Info("waiting for all nodes to report healthy...")
@@ -58,7 +58,7 @@ func await(nw network.Network, log logging.Logger, timeout time.Duration) error 
 }
 
 // Copy a file from src to dst
-func copy(src, dst string) (int64, error) {
+func Copy(src, dst string) (int64, error) {
 	sourceFileStat, err := os.Stat(src)
 	if err != nil {
 		return 0, err
