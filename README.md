@@ -20,7 +20,6 @@ make run
 ```
 
 To run e2e tests:
-
 ```shell
-go run ./cmd/main.go e2e kvstore rpc_url
+make e2e-kvstore 
 ```

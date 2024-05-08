@@ -83,7 +83,30 @@ func main() {
 						Name:  "kvstore",
 						Usage: "kvstore end-to-end tests",
 						Action: func(cCtx *cli.Context) error {
-							internal.RunKVStoreTests(cCtx.Args().First(), log)
+							nw, err := createNetwork(log, binaryPath, workDir)
+							if err != nil {
+								fmt.Println(err)
+								os.Exit(1)
+							}
+							defer func() {
+								if err := nw.Stop(context.Background()); err != nil {
+									log.Error("error while shutting down network", zap.Error(err))
+								}
+							}()
+
+							rpcs, err := runNodes(log, binaryPath, nw)
+							if err != nil {
+								log.Fatal("error starting nodes", zap.Error(err))
+								return cli.Exit("exiting", 1)
+							}
+
+							if len(rpcs) == 0 {
+								log.Fatal("no rpcs")
+								return cli.Exit("exiting", 1)
+							}
+
+							internal.RunKVStoreTests(rpcs[0], log)
+
 							return nil
 						},
 					},
