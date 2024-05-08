@@ -13,3 +13,9 @@ Then execute:
 ```shell
 go run ./cmd/main.go
 ```
+
+To run e2e tests:
+```shell
+make run
+make e2e-kv
+```

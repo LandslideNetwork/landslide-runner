@@ -83,7 +83,7 @@ func main() {
 						Name:  "kvstore",
 						Usage: "kvstore end-to-end tests",
 						Action: func(cCtx *cli.Context) error {
-							log.Info("not implemented yet")
+							internal.CheckTX(cCtx.Args().First(), log)
 							return nil
 						},
 					},
