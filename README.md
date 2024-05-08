@@ -13,9 +13,14 @@ Then execute:
 ```shell
 go run ./cmd/main.go
 ```
+or
 
-To run e2e tests:
 ```shell
 make run
-make e2e-kv
+```
+
+To run e2e tests:
+
+```shell
+go run ./cmd/main.go e2e kvstore rpc_url
 ```

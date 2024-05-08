@@ -8,12 +8,16 @@ import (
 	"go.uber.org/zap"
 )
 
-func CheckTX(rpcAddr string, log logging.Logger) {
+func RunKVStoreTests(rpcAddr string, log logging.Logger) {
 	c, err := rpchttp.New(rpcAddr, "/websocket")
 	if err != nil {
 		log.Fatal("error creating client", zap.Error(err)) //nolint:gocritic
 	}
 
+	CheckTX(c, log)
+}
+
+func CheckTX(c *rpchttp.HTTP, log logging.Logger) {
 	// Create a transaction
 	k := []byte("name")
 	v := []byte("satoshi")
