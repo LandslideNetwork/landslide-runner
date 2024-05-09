@@ -15,6 +15,7 @@ func RunKVStoreTests(rpcAddr string, log logging.Logger) {
 	}
 
 	CheckTX(c, log)
+	Info(c, log)
 }
 
 func CheckTX(c *rpchttp.HTTP, log logging.Logger) {
@@ -35,4 +36,35 @@ func CheckTX(c *rpchttp.HTTP, log logging.Logger) {
 	}
 
 	log.Info("CheckTx transaction success")
+}
+
+func Info(c *rpchttp.HTTP, log logging.Logger) {
+	_, err := c.NetInfo(context.Background())
+	if err != nil {
+		log.Fatal("error NetInfo", zap.Error(err))
+		return
+	}
+	log.Info("NetInfo success")
+
+	resABCI, err := c.ABCIInfo(context.Background())
+	if err != nil {
+		log.Fatal("error ABCIInfo", zap.Error(err))
+		return
+	}
+	if resABCI.Response.LastBlockAppHash == nil {
+		log.Fatal("ABCIInfo failed")
+		return
+	}
+	log.Info("ABCIInfo success")
+
+	resBc, err := c.BlockchainInfo(context.Background(), 0, 0)
+	if err != nil {
+		log.Fatal("error BlockchainInfo", zap.Error(err))
+		return
+	}
+	if len(resBc.BlockMetas) == 0 {
+		log.Fatal("BlockchainInfo failed")
+		return
+	}
+	log.Info("BlockchainInfo success")
 }
