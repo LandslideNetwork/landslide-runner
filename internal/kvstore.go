@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/ava-labs/avalanchego/utils/logging"
@@ -16,6 +17,7 @@ func RunKVStoreTests(rpcAddr string, log logging.Logger) {
 
 	CheckTX(c, log)
 	Info(c, log)
+	Query(c, log)
 }
 
 func CheckTX(c *rpchttp.HTTP, log logging.Logger) {
@@ -67,4 +69,40 @@ func Info(c *rpchttp.HTTP, log logging.Logger) {
 		return
 	}
 	log.Info("BlockchainInfo success")
+}
+
+func Query(c *rpchttp.HTTP, log logging.Logger) {
+	// Create a transaction
+	k := []byte("query_key")
+	v := []byte("query_value")
+	tx := append(k, append([]byte("="), v...)...)
+
+	res, err := c.BroadcastTxCommit(context.Background(), tx)
+	if err != nil {
+		log.Fatal("BroadcastTxSync error", zap.Error(err))
+		return
+	}
+
+	if res.CheckTx.IsErr() || res.TxResult.IsErr() {
+		log.Fatal("BroadcastTxCommit transaction failed")
+	}
+	log.Info("BroadcastTxSync transaction success")
+
+	abcires, err := c.ABCIQuery(context.Background(), "/key", k)
+	if err != nil {
+		log.Fatal("ABCIQuery failed", zap.Error(err))
+		return
+	}
+	if abcires.Response.IsErr() {
+		log.Fatal("ABCIQuery failed")
+		return
+	}
+	if !bytes.Equal(abcires.Response.Key, k) {
+		log.Fatal("ABCIQuery returned key does not match queried key")
+		return
+	}
+	if !bytes.Equal(abcires.Response.Value, v) {
+		log.Fatal("ABCIQuery returned value does not match sent value")
+		return
+	}
 }
