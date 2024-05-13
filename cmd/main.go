@@ -99,14 +99,12 @@ func main() {
 								log.Fatal("error starting nodes", zap.Error(err))
 								return cli.Exit("exiting", 1)
 							}
-
 							if len(rpcs) == 0 {
 								log.Fatal("no rpcs")
 								return cli.Exit("exiting", 1)
 							}
 
 							internal.RunKVStoreTests(rpcs[0], log)
-
 							return nil
 						},
 					},

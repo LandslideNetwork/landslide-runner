@@ -3,6 +3,7 @@ package internal
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/ava-labs/avalanchego/utils/logging"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
@@ -17,6 +18,7 @@ func RunKVStoreTests(rpcAddr string, log logging.Logger) {
 
 	CheckTX(c, log)
 	Info(c, log)
+	Commit(c, log)
 	Query(c, log)
 }
 
@@ -69,6 +71,90 @@ func Info(c *rpchttp.HTTP, log logging.Logger) {
 		return
 	}
 	log.Info("BlockchainInfo success")
+}
+
+// Commit waits for a new block to be committed
+// and then commits the next block
+// It also checks the apphash and the last commit hash
+// of the new block
+func Commit(c *rpchttp.HTTP, log logging.Logger) {
+	// get the current status
+	s, err := c.Status(context.Background())
+	if err != nil {
+		log.Fatal("error Status", zap.Error(err))
+		return
+	}
+
+	height := s.SyncInfo.LatestBlockHeight
+	triesCounter := 5
+	for {
+		<-time.After(1 * time.Second)
+
+		s, err = c.Status(context.Background())
+		if err != nil {
+			log.Fatal("error Status", zap.Error(err))
+			return
+		}
+
+		log.Info("waiting for new block",
+			zap.Int64("current_height", height),
+			zap.Int64("latest_height", s.SyncInfo.LatestBlockHeight),
+		)
+
+		if s.SyncInfo.LatestBlockHeight > height {
+			break
+		}
+
+		triesCounter--
+		if triesCounter == 0 {
+			log.Fatal("failed to wait for new block")
+			return
+		}
+	}
+
+	nextHeight := height + 1
+	commit, err := c.Commit(context.Background(), &nextHeight)
+	if err != nil {
+		log.Fatal("error Commit", zap.Error(err))
+		return
+	}
+	if commit.Commit == nil {
+		log.Fatal("Commit failed")
+		return
+	}
+
+	// get block info
+	block, err := c.Block(context.Background(), &nextHeight)
+	if err != nil {
+		log.Fatal("error Block", zap.Error(err))
+		return
+	}
+	if !(len(block.Block.Header.AppHash) > 0) {
+		log.Fatal("Block failed")
+		return
+	}
+	if !bytes.Equal(block.Block.Header.AppHash.Bytes(), commit.Header.AppHash.Bytes()) {
+		log.Fatal("Block failed")
+		return
+	}
+	if nextHeight != block.Block.Header.Height {
+		log.Fatal("Block height does not match")
+		return
+	}
+
+	// get the previous commit
+	previousHeight := nextHeight - 1
+	commitLast, err := c.Commit(context.Background(), &previousHeight)
+	if err != nil {
+		log.Fatal("error Commit", zap.Error(err))
+		return
+	}
+	if !bytes.Equal(block.Block.LastCommitHash, commitLast.Commit.Hash()) {
+		log.Fatal("Commit failed")
+		return
+	}
+
+	log.Info("Commit success")
 }
 
 func Query(c *rpchttp.HTTP, log logging.Logger) {
