@@ -3,7 +3,6 @@ package internal
 import (
 	"bytes"
 	"context"
-	"time"
 
 	"github.com/ava-labs/avalanchego/utils/logging"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
@@ -18,8 +17,8 @@ func RunKVStoreTests(rpcAddr string, log logging.Logger) {
 
 	CheckTX(c, log)
 	Info(c, log)
-	Commit(c, log)
 	Query(c, log)
+	Commit(c, log)
 }
 
 func CheckTX(c *rpchttp.HTTP, log logging.Logger) {
@@ -86,30 +85,15 @@ func Commit(c *rpchttp.HTTP, log logging.Logger) {
 	}
 
 	height := s.SyncInfo.LatestBlockHeight
-	triesCounter := 5
-	for {
-		<-time.After(1 * time.Second)
 
-		s, err = c.Status(context.Background())
-		if err != nil {
-			log.Fatal("error Status", zap.Error(err))
-			return
-		}
-
-		log.Info("waiting for new block",
-			zap.Int64("current_height", height),
-			zap.Int64("latest_height", s.SyncInfo.LatestBlockHeight),
-		)
-
-		if s.SyncInfo.LatestBlockHeight > height {
-			break
-		}
-
-		triesCounter--
-		if triesCounter == 0 {
-			log.Fatal("failed to wait for new block")
-			return
-		}
+	// Create a transaction
+	k := []byte("commit_key")
+	v := []byte("commit_value")
+	tx := append(k, append([]byte("="), v...)...)
+	_, err = c.BroadcastTxCommit(context.Background(), tx)
+	if err != nil {
+		log.Fatal("BroadcastTxSync error", zap.Error(err))
+		return
 	}
 
 	nextHeight := height + 1

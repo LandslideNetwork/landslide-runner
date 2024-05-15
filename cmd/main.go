@@ -49,9 +49,6 @@ func main() {
 	binaryPath := "/tmp/e2e-test-landslide/avalanchego"
 	workDir := "/tmp/e2e-test-landslide/nodes"
 
-	os.RemoveAll(workDir)
-	os.MkdirAll(workDir, 0777)
-
 	app := &cli.App{
 		Name:  "main",
 		Usage: "runNodes landslidevm tests",
@@ -194,6 +191,15 @@ func runNodes(log logging.Logger, binaryPath string, nw network.Network) ([]stri
 }
 
 func createNetwork(log logging.Logger, binaryPath string, workDir string) (network.Network, error) {
+	err := os.RemoveAll(workDir)
+	if err != nil {
+		return nil, err
+	}
+	err = os.MkdirAll(workDir, 0777)
+	if err != nil {
+		return nil, err
+	}
+
 	nwConfig, err := local.NewDefaultConfig(fmt.Sprintf("%s/avalanchego", binaryPath))
 	if err != nil {
 		return nil, err
