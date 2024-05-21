@@ -11,6 +11,7 @@ import (
 
 	"github.com/ava-labs/avalanche-network-runner/network"
 	"github.com/ava-labs/avalanchego/utils/logging"
+	"github.com/cometbft/cometbft/libs/rand"
 	"go.uber.org/zap"
 )
 
@@ -43,6 +44,13 @@ func GracefulShutdown(nw network.Network, log logging.Logger) {
 	if err := nw.Stop(context.Background()); err != nil {
 		log.Error("error while shutting down network", zap.Error(err))
 	}
+}
+
+// MakeTxKV returns a text transaction, allong with expected key, value pair
+func MakeTxKV() ([]byte, []byte, []byte) {
+	k := []byte(rand.Str(2))
+	v := []byte(rand.Str(2))
+	return k, v, append(k, append([]byte("="), v...)...)
 }
 
 // Wait until the nodes in the network are ready

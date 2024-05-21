@@ -84,12 +84,12 @@ func Commit(c *rpchttp.HTTP, log logging.Logger) {
 		return
 	}
 
+	log.Info("got status", zap.Any("status", s))
 	height := s.SyncInfo.LatestBlockHeight
 
 	// Create a transaction
-	k := []byte("commit_key")
-	v := []byte("commit_value")
-	tx := append(k, append([]byte("="), v...)...)
+	_, _, tx := MakeTxKV()
+
 	_, err = c.BroadcastTxCommit(context.Background(), tx)
 	if err != nil {
 		log.Fatal("BroadcastTxSync error", zap.Error(err))
@@ -142,10 +142,9 @@ func Commit(c *rpchttp.HTTP, log logging.Logger) {
 }
 
 func Query(c *rpchttp.HTTP, log logging.Logger) {
+	log.Info("Querying the key value store")
 	// Create a transaction
-	k := []byte("query_key")
-	v := []byte("query_value")
-	tx := append(k, append([]byte("="), v...)...)
+	k, v, tx := MakeTxKV()
 
 	res, err := c.BroadcastTxCommit(context.Background(), tx)
 	if err != nil {
@@ -172,7 +171,10 @@ func Query(c *rpchttp.HTTP, log logging.Logger) {
 		return
 	}
 	if !bytes.Equal(abcires.Response.Value, v) {
+		log.Info("ABCIQuery", zap.String("value", string(abcires.Response.Value)), zap.String("expected", string(v)))
 		log.Fatal("ABCIQuery returned value does not match sent value")
 		return
 	}
+	log.Info("ABCIQuery success", zap.String("key", string(k)), zap.String("value", string(v)))
+	log.Info("ABCIQuery success", zap.String("resp", string(abcires.Response.Key)), zap.String("value", string(abcires.Response.Value)))
 }
