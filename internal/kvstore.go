@@ -85,61 +85,61 @@ func Commit(c *rpchttp.HTTP, log logging.Logger) {
 	}
 
 	log.Info("got status", zap.Any("status", s))
-	// TODO: fix c.Commit at vm
-	// height := s.SyncInfo.LatestBlockHeight
-	//
-	// // Create a transaction
-	// _, _, tx := MakeTxKV()
-	//
-	// _, err = c.BroadcastTxCommit(context.Background(), tx)
-	// if err != nil {
-	// 	log.Fatal("BroadcastTxSync error", zap.Error(err))
-	// 	return
-	// }
-	//
-	// nextHeight := height + 1
-	// commit, err := c.Commit(context.Background(), &nextHeight)
-	// if err != nil {
-	// 	log.Fatal("error Commit", zap.Error(err))
-	// 	return
-	// }
-	// if commit.Commit == nil {
-	// 	log.Fatal("Commit failed")
-	// 	return
-	// }
-	//
-	// // get block info
-	// block, err := c.Block(context.Background(), &nextHeight)
-	// if err != nil {
-	// 	log.Fatal("error Block", zap.Error(err))
-	// 	return
-	// }
-	// if !(len(block.Block.Header.AppHash) > 0) {
-	// 	log.Fatal("Block failed")
-	// 	return
-	// }
-	// if !bytes.Equal(block.Block.Header.AppHash.Bytes(), commit.Header.AppHash.Bytes()) {
-	// 	log.Fatal("Block failed")
-	// 	return
-	// }
-	// if nextHeight != block.Block.Header.Height {
-	// 	log.Fatal("Block height does not match")
-	// 	return
-	// }
-	//
-	// // get the previous commit
-	// previousHeight := nextHeight - 1
-	// commitLast, err := c.Commit(context.Background(), &previousHeight)
-	// if err != nil {
-	// 	log.Fatal("error Commit", zap.Error(err))
-	// 	return
-	// }
-	// if !bytes.Equal(block.Block.LastCommitHash, commitLast.Commit.Hash()) {
-	// 	log.Fatal("Commit failed")
-	// 	return
-	// }
-	//
-	// log.Info("Commit success")
+
+	height := s.SyncInfo.LatestBlockHeight
+
+	// Create a transaction
+	_, _, tx := MakeTxKV()
+
+	_, err = c.BroadcastTxCommit(context.Background(), tx)
+	if err != nil {
+		log.Fatal("BroadcastTxSync error", zap.Error(err))
+		return
+	}
+
+	nextHeight := height + 1
+	commit, err := c.Commit(context.Background(), &nextHeight)
+	if err != nil {
+		log.Fatal("error Commit", zap.Error(err))
+		return
+	}
+	if commit.Commit == nil {
+		log.Fatal("Commit failed")
+		return
+	}
+
+	// get block info
+	block, err := c.Block(context.Background(), &nextHeight)
+	if err != nil {
+		log.Fatal("error Block", zap.Error(err))
+		return
+	}
+	if !(len(block.Block.Header.AppHash) > 0) {
+		log.Fatal("Block failed")
+		return
+	}
+	if !bytes.Equal(block.Block.Header.AppHash.Bytes(), commit.Header.AppHash.Bytes()) {
+		log.Fatal("Block failed")
+		return
+	}
+	if nextHeight != block.Block.Header.Height {
+		log.Fatal("Block height does not match")
+		return
+	}
+
+	// get the previous commit
+	previousHeight := nextHeight - 1
+	commitLast, err := c.Commit(context.Background(), &previousHeight)
+	if err != nil {
+		log.Fatal("error Commit", zap.Error(err))
+		return
+	}
+	if !bytes.Equal(block.Block.LastCommitHash, commitLast.Commit.Hash()) {
+		log.Fatal("Commit failed")
+		return
+	}
+
+	log.Info("Commit success")
 }
 
 func Query(c *rpchttp.HTTP, log logging.Logger) {
