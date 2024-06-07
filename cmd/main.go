@@ -205,7 +205,8 @@ func createNetwork(log logging.Logger, binaryPath string, workDir string) (netwo
 		return nil, err
 	}
 
-	nwConfig.Flags["log-level"] = "INFO"
+	// nwConfig.Flags["log-level"] = "INFO"
+	nwConfig.Flags["log-level"] = "DEBUG"
 
 	// adjust avalanche port to not conflict with default ports 9650
 	for _, cfg := range nwConfig.NodeConfigs {

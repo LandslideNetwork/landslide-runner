@@ -3,6 +3,7 @@ package internal
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/ava-labs/avalanchego/utils/logging"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
@@ -14,11 +15,24 @@ func RunKVStoreTests(rpcAddr string, log logging.Logger) {
 	if err != nil {
 		log.Fatal("error creating client", zap.Error(err)) //nolint:gocritic
 	}
+	<-time.After(2 * time.Second)
+	// CheckTX(c, log)
+	// Info(c, log)
+	// Query(c, log)
+	// Commit(c, log)
 
-	CheckTX(c, log)
-	Info(c, log)
-	Query(c, log)
-	Commit(c, log)
+	for i := 0; i < 100; i++ {
+		<-time.After(2 * time.Second)
+		log.Info("Running Query test", zap.Int("iteration", i))
+		k, v, tx := MakeTxKV()
+
+		log.Info("Broadcasting transaction", zap.String("key", string(k)), zap.String("value", string(v)))
+		_, err := c.BroadcastTxCommit(context.Background(), tx)
+		if err != nil {
+			log.Fatal("BroadcastTxSync error", zap.Error(err))
+			return
+		}
+	}
 }
 
 func CheckTX(c *rpchttp.HTTP, log logging.Logger) {
@@ -147,6 +161,7 @@ func Query(c *rpchttp.HTTP, log logging.Logger) {
 	// Create a transaction
 	k, v, tx := MakeTxKV()
 
+	log.Info("Broadcasting transaction", zap.String("key", string(k)), zap.String("value", string(v)))
 	res, err := c.BroadcastTxCommit(context.Background(), tx)
 	if err != nil {
 		log.Fatal("BroadcastTxSync error", zap.Error(err))
