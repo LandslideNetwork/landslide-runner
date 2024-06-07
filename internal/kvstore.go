@@ -20,6 +20,7 @@ func RunKVStoreTests(rpcAddr string, log logging.Logger) {
 	// Info(c, log)
 	// Query(c, log)
 	// Commit(c, log)
+	errLimit := 3
 
 	for i := 0; i < 100; i++ {
 		<-time.After(2 * time.Second)
@@ -29,8 +30,14 @@ func RunKVStoreTests(rpcAddr string, log logging.Logger) {
 		log.Info("Broadcasting transaction", zap.String("key", string(k)), zap.String("value", string(v)))
 		_, err := c.BroadcastTxCommit(context.Background(), tx)
 		if err != nil {
-			log.Fatal("BroadcastTxSync error", zap.Error(err))
-			return
+			log.Error("BroadcastTxSync error", zap.Error(err))
+
+			if errLimit == 0 {
+				return
+			}
+			errLimit--
+			log.Info("Retrying Notify")
+			_, _ = c.BlockResults(context.Background(), nil)
 		}
 	}
 }
