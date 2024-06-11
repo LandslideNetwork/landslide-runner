@@ -27,8 +27,10 @@ const (
 var (
 	goPath = os.ExpandEnv("$GOPATH")
 
-	//go:embed data/genesis.json
-	genesis []byte
+	//go:embed data/kvstore.json
+	genesisKvStore []byte
+	//go:embed data/wasm.json
+	genesisWasm []byte
 )
 
 func main() {
@@ -56,20 +58,45 @@ func main() {
 			{
 				Name:  "run",
 				Usage: "spin up network and deploy landslidevm as a subnet",
-				Action: func(cCtx *cli.Context) error {
-					nw, err := createNetwork(log, binaryPath, workDir)
-					if err != nil {
-						fmt.Println(err)
-						os.Exit(1)
-					}
-					_, err = runNodes(log, binaryPath, nw)
-					if err != nil {
-						log.Fatal("error starting nodes", zap.Error(err))
-						return cli.Exit("exiting", 1)
-					}
+				Subcommands: []*cli.Command{
+					{
+						Name:  "kvstore",
+						Usage: "rum kvstore app as subnet",
+						Action: func(cCtx *cli.Context) error {
+							nw, err := createNetwork(log, binaryPath, workDir)
+							if err != nil {
+								fmt.Println(err)
+								os.Exit(1)
+							}
+							_, err = runNodes(log, binaryPath, genesisKvStore, nw)
+							if err != nil {
+								log.Fatal("error starting nodes", zap.Error(err))
+								return cli.Exit("exiting", 1)
+							}
 
-					internal.GracefulShutdown(nw, log)
-					return nil
+							internal.GracefulShutdown(nw, log)
+							return nil
+						},
+					},
+					{
+						Name:  "wasm",
+						Usage: "rum CosmWasm app as subnet",
+						Action: func(cCtx *cli.Context) error {
+							nw, err := createNetwork(log, binaryPath, workDir)
+							if err != nil {
+								fmt.Println(err)
+								os.Exit(1)
+							}
+							_, err = runNodes(log, binaryPath, genesisWasm, nw)
+							if err != nil {
+								log.Fatal("error starting nodes", zap.Error(err))
+								return cli.Exit("exiting", 1)
+							}
+
+							internal.GracefulShutdown(nw, log)
+							return nil
+						},
+					},
 				},
 			},
 			{
@@ -91,7 +118,7 @@ func main() {
 								}
 							}()
 
-							rpcs, err := runNodes(log, binaryPath, nw)
+							rpcs, err := runNodes(log, binaryPath, genesisKvStore, nw)
 							if err != nil {
 								log.Fatal("error starting nodes", zap.Error(err))
 								return cli.Exit("exiting", 1)
@@ -132,7 +159,7 @@ func main() {
 	}
 }
 
-func runNodes(log logging.Logger, binaryPath string, nw network.Network) ([]string, error) {
+func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.Network) ([]string, error) {
 	// Wait until the nodes in the network are ready
 	if err := internal.Await(nw, log, healthyTimeout); err != nil {
 		return nil, err
