@@ -49,6 +49,7 @@ func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int) {
 
 		if res.Code != 0 {
 			log.Fatal("BroadcastTxAsync transaction failed", zap.Uint32("code", res.Code))
+			return
 		}
 
 		// store the key value pair
@@ -60,7 +61,8 @@ func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int) {
 	// wait for 15 seconds to let the transactions be committed
 	<-time.After(15 * time.Second)
 
-	for {
+	// 30 attempts to query the key value store with delay of 5 seconds
+	for j := 0; j < 30; j++ {
 		if len(kvs) == 0 {
 			log.Info("All transactions are committed")
 			break
