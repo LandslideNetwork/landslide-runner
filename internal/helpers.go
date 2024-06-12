@@ -48,8 +48,8 @@ func GracefulShutdown(nw network.Network, log logging.Logger) {
 
 // MakeTxKV returns a text transaction, allong with expected key, value pair
 func MakeTxKV() ([]byte, []byte, []byte) {
-	k := []byte(rand.Str(2))
-	v := []byte(rand.Str(2))
+	k := []byte(rand.Str(3))
+	v := []byte(rand.Str(3))
 	return k, v, append(k, append([]byte("="), v...)...)
 }
 
