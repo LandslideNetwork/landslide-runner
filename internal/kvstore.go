@@ -79,7 +79,7 @@ func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int, rpcAddrs []s
 			}
 
 			for i := 0; i < len(kvccpy); i++ {
-				err := ABCIQuery(c, log, kvs[i].k, kvs[i].v)
+				err := ABCIQuery(c, log, kvccpy[i].k, kvccpy[i].v)
 				if err != nil {
 					// wait for 5 seconds for block acceptance
 					<-time.After(5 * time.Second)
