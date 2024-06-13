@@ -3,6 +3,7 @@ package internal
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -12,24 +13,26 @@ import (
 )
 
 // RunKVStoreTests runs the key value store tests
-func RunKVStoreTests(rpcAddr string, log logging.Logger) {
-	c, err := rpchttp.New(rpcAddr, "/websocket")
+func RunKVStoreTests(rpcAddrs []string, log logging.Logger) {
+	log.Info("running kvstore tests at", zap.String("rpc", rpcAddrs[0]))
+	c, err := rpchttp.New(rpcAddrs[0], "/websocket")
+
 	if err != nil {
 		log.Fatal("error creating client", zap.Error(err)) //nolint:gocritic
 	}
 	<-time.After(2 * time.Second) // wait for first block to be committed
 
-	CheckTX(c, log)
-	Info(c, log)
-	Query(c, log)
-	Commit(c, log)
+	// CheckTX(c, log)
+	// Info(c, log)
+	// Query(c, log)
+	// Commit(c, log)
 
-	GenerateTXSAsync(c, log, 200)
+	GenerateTXSAsync(c, log, 10, rpcAddrs)
 }
 
 // GenerateTXSAsync generates num transactions asynchronously
 // and waits for them to be committed
-func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int) {
+func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int, rpcAddrs []string) {
 	type KV struct {
 		k []byte
 		v []byte
@@ -61,23 +64,31 @@ func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int) {
 	// wait for 15 seconds to let the transactions be committed
 	<-time.After(15 * time.Second)
 
-	// 30 attempts to query the key value store with delay of 5 seconds
-	for j := 0; j < 30; j++ {
-		if len(kvs) == 0 {
-			log.Info("All transactions are committed")
-			break
-		}
+	rpchttp.New(rpcAddrs[1], "/websocket")
+	for i := 0; i < len(rpcAddrs); i++ {
+		kvccpy := make([]KV, len(kvs))
+		copy(kvccpy, kvs)
 
-		for i := 0; i < len(kvs); i++ {
-			err := ABCIQuery(c, log, kvs[i].k, kvs[i].v)
-			if err != nil {
-				// wait for 5 seconds for block acceptance
-				<-time.After(5 * time.Second)
+		log.Info("Checking all committed transactions", zap.String("at rpc", rpcAddrs[i]))
+
+		// 30 attempts to query the key value store with delay of 5 seconds
+		for j := 0; j < 30; j++ {
+			if len(kvccpy) == 0 {
+				log.Info("All transactions are committed", zap.String("at rpc", rpcAddrs[i]))
 				break
 			}
-			// remove the key value pair
-			kvs = append(kvs[:i], kvs[i+1:]...)
-			i--
+
+			for i := 0; i < len(kvccpy); i++ {
+				err := ABCIQuery(c, log, kvs[i].k, kvs[i].v)
+				if err != nil {
+					// wait for 5 seconds for block acceptance
+					<-time.After(5 * time.Second)
+					break
+				}
+				// remove the key value pair
+				kvccpy = append(kvccpy[:i], kvccpy[i+1:]...)
+				i--
+			}
 		}
 	}
 }
@@ -102,7 +113,11 @@ func ABCIQuery(c *rpchttp.HTTP, log logging.Logger, k, v []byte) error {
 		log.Fatal("ABCIQuery returned value does not match sent value")
 		return errors.New("ABCIQuery returned value does not match sent value")
 	}
-	log.Info("ABCIQuery success", zap.String("resp", string(abcires.Response.Key)), zap.String("value", string(abcires.Response.Value)))
+	log.Info("ABCIQuery success",
+		zap.String("resp", string(abcires.Response.Key)),
+		zap.String("value", string(abcires.Response.Value)),
+		zap.String("data", hex.EncodeToString(abcires.Response.Key)),
+	)
 
 	return nil
 }

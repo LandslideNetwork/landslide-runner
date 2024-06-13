@@ -128,7 +128,9 @@ func main() {
 								return cli.Exit("exiting", 1)
 							}
 
-							internal.RunKVStoreTests(rpcs[0], log)
+							internal.RunKVStoreTests(rpcs, log)
+
+							internal.GracefulShutdown(nw, log)
 							return nil
 						},
 					},
