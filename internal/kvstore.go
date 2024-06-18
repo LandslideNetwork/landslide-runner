@@ -128,12 +128,12 @@ func CheckTX(c *rpchttp.HTTP, log logging.Logger) {
 }
 
 func Info(c *rpchttp.HTTP, log logging.Logger) {
-	_, err := c.NetInfo(context.Background())
+	res, err := c.NetInfo(context.Background())
 	if err != nil {
 		log.Fatal("error NetInfo", zap.Error(err))
 		return
 	}
-	log.Info("NetInfo success")
+	log.Info("NetInfo success", zap.Any("res", res))
 
 	resABCI, err := c.ABCIInfo(context.Background())
 	if err != nil {
@@ -144,7 +144,7 @@ func Info(c *rpchttp.HTTP, log logging.Logger) {
 		log.Fatal("ABCIInfo failed")
 		return
 	}
-	log.Info("ABCIInfo success")
+	log.Info("ABCIInfo success", zap.Any("res", resABCI))
 
 	resBc, err := c.BlockchainInfo(context.Background(), 0, 0)
 	if err != nil {
@@ -155,7 +155,7 @@ func Info(c *rpchttp.HTTP, log logging.Logger) {
 		log.Fatal("BlockchainInfo failed")
 		return
 	}
-	log.Info("BlockchainInfo success")
+	log.Info("BlockchainInfo success", zap.Any("res", resBc))
 }
 
 // Commit waits for a new block to be committed

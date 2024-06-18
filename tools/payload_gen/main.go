@@ -1,14 +1,11 @@
 package main
 
 import (
-	"encoding/hex"
 	"fmt"
 
 	"go.uber.org/zap"
-	"google.golang.org/grpc/encoding"
-	"google.golang.org/grpc/encoding/proto"
 
-	bank "github.com/cosmos/cosmos-sdk/x/bank/types"
+	"payload_gen/internal"
 )
 
 func main() {
@@ -20,38 +17,30 @@ func main() {
 	defer logger.Sync() // flushes buffer, if any
 	log := logger.Sugar()
 
-	address := "wasm1vcw0he5l9mu54zawg3h440p83ex70ccmme53ac"
-	// // Create a QueryAllBalancesRequest protobuf message
-	req := &bank.QueryAllBalancesRequest{
-		Address: address,
-	}
+	client := internal.NewChainClient(300000, log)
 
-	codec := encoding.GetCodec(proto.Name)
-
-	queryArgs, err := codec.Marshal(req)
-	if err != nil {
-		log.Fatalf("error marshaling request: %v", err)
+	client.AddAccount("user1", internal.User1Mnemonic, 0, 1)
+	acc1, exist := client.GetAccount("user1")
+	if !exist {
+		log.Fatalf("account not found")
 		return
 	}
+	log.Infof("user1 address: %s", acc1.Address)
 
-	// convert to hex
-	queryHex := hex.EncodeToString(queryArgs)
-	// Print the hex encoded query
-	log.Infof("QueryAllBalancesRequest hex encoded: %s", queryHex)
-
-	// decode hex back to bytes
-	decodedBytes, err := hex.DecodeString(queryHex)
-	if err != nil {
-		log.Fatalf("error decoding hex: %v", err)
+	client.AddAccount("user2", internal.User2Mnemonic, 0, 2)
+	acc2, exist := client.GetAccount("user2")
+	if !exist {
+		log.Fatalf("account not found")
 		return
 	}
-	// decode back to bank.QueryAllBalancesRequest
-	err = encoding.GetCodec(proto.Name).Unmarshal(decodedBytes, req)
-	if err != nil {
-		log.Fatalf("error unmarshaling request: %v", err)
-		return
-	}
+	log.Infof("user2 address: %s", acc2.Address)
 
-	// Print the decoded query
-	log.Infof("QueryAllBalancesRequest decoded: %v", req)
+	internal.GetQueryAllBalancesRequestHex(acc1.Address, log)
+	internal.GetQueryAllBalancesRequestHex(acc2.Address, log)
+
+	internal.BankSendTxHex(client, log, "user1", "user2", 5000000)
+	err = client.IncreaseSequence("user1")
+	if err != nil {
+		log.Fatalf("error increasing sequence: %v", err)
+	}
 }
