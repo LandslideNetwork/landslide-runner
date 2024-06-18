@@ -45,7 +45,7 @@ func main() {
 		log.Fatalf("error decoding hex: %v", err)
 		return
 	}
-	// decode queryHex and compare with queryArgs
+	// decode back to bank.QueryAllBalancesRequest
 	err = encoding.GetCodec(proto.Name).Unmarshal(decodedBytes, req)
 	if err != nil {
 		log.Fatalf("error unmarshaling request: %v", err)
