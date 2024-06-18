@@ -136,7 +136,25 @@ func main() {
 						Name:  "wasm",
 						Usage: "wasm end-to-end tests",
 						Action: func(cCtx *cli.Context) error {
-							log.Info("not implemented yet")
+							nw, err := createNetwork(log, binaryPath, workDir)
+							if err != nil {
+								fmt.Println(err)
+								os.Exit(1)
+							}
+							rpcs, err := runNodes(log, binaryPath, genesisWasm, nw)
+							if err != nil {
+								log.Fatal("error starting nodes", zap.Error(err))
+								return cli.Exit("exiting", 1)
+							}
+
+							if len(rpcs) == 0 {
+								log.Fatal("no rpcs")
+								return cli.Exit("exiting", 1)
+							}
+
+							internal.RunWASMTests(rpcs, log)
+
+							internal.GracefulShutdown(nw, log)
 							return nil
 						},
 					},
