@@ -9,21 +9,20 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/auth/tx"
 	auth "github.com/cosmos/cosmos-sdk/x/auth/types"
 	bank "github.com/cosmos/cosmos-sdk/x/bank/types"
-	"github.com/gogo/protobuf/proto"
 )
 
-// encodingConfig specifies the concrete encoding types to use for a given app.
-// This is provided for compatibility between protobuf and amino implementations.
+var _ Codec = codec{}
+
 type (
+	codec struct {
+		enc encodingConfig
+	}
+
 	encodingConfig struct {
 		InterfaceRegistry cdctypes.InterfaceRegistry
 		Marshaller        sdkcodec.Codec
 		TxConfig          client.TxConfig
 		Amino             *sdkcodec.LegacyAmino
-	}
-
-	codec struct {
-		enc encodingConfig
 	}
 )
 
@@ -53,12 +52,4 @@ func NewCodec() Codec {
 
 func (c codec) GetTxConfig() client.TxConfig {
 	return c.enc.TxConfig
-}
-
-func (c codec) MarshalMessage(dest proto.Message) ([]byte, error) {
-	return c.enc.Marshaller.MarshalJSON(dest)
-}
-
-func (c codec) GetRegistry() cdctypes.InterfaceRegistry {
-	return c.enc.InterfaceRegistry
 }

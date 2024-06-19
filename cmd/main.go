@@ -31,6 +31,8 @@ var (
 	genesisKvStore []byte
 	//go:embed data/wasm.json
 	genesisWasm []byte
+	//go:embed data/testdata/nameservice.wasm.hex
+	nameserviceDeployHex string
 )
 
 func main() {
@@ -152,7 +154,11 @@ func main() {
 								return cli.Exit("exiting", 1)
 							}
 
-							internal.RunWASMTests(rpcs, log)
+							internal.RunWASMTests(
+								rpcs,
+								log,
+								nameserviceDeployHex,
+							)
 
 							internal.GracefulShutdown(nw, log)
 							return nil

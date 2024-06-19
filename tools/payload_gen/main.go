@@ -1,11 +1,18 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 
 	"go.uber.org/zap"
 
 	"payload_gen/internal"
+	resp "payload_gen/internal/responses"
+)
+
+var (
+	//go:embed testdata/nameservice.wasm
+	nameserviceWasm []byte
 )
 
 func main() {
@@ -18,6 +25,8 @@ func main() {
 	log := logger.Sugar()
 
 	client := internal.NewChainClient(300000, log)
+
+	resp.PrintDecodedBalances(log)
 
 	client.AddAccount("user1", internal.User1Mnemonic, 0, 1)
 	acc1, exist := client.GetAccount("user1")
@@ -43,4 +52,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("error increasing sequence: %v", err)
 	}
+
+	internal.DeployContractHex(client, log, "user1", nameserviceWasm, "testdata/nameservice.wasm.hex")
 }

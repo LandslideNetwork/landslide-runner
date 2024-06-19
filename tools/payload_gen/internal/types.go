@@ -38,7 +38,7 @@ func SetPrefixes(accountAddressPrefix string) {
 	config.Seal()
 }
 
-// getProtoCodec - create new proto codec for keyring.
+// getProtoCodec - create new proto Codec for keyring.
 func getProtoCodec() codec.Codec {
 	registry := cdctypes.NewInterfaceRegistry()
 	cryptocodec.RegisterInterfaces(registry)

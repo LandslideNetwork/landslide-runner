@@ -12,7 +12,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"go.uber.org/zap"
 
-	client_codec "payload_gen/internal/codec"
+	cd "payload_gen/internal/codec"
 )
 
 // SetPrefixes - set prefixes for the chain.
@@ -31,7 +31,7 @@ type (
 		chainID        string
 		gasLimit       uint64
 		signerAccounts map[string]AccountInfo
-		codec          client_codec.Codec
+		Codec          cd.Codec
 		keyring        keyring.Keyring
 		log            *zap.SugaredLogger
 	}
@@ -53,7 +53,7 @@ func NewChainClient(
 		chainID:        chainID,
 		gasLimit:       gasLimit,
 		signerAccounts: make(map[string]AccountInfo),
-		codec:          client_codec.NewCodec(),
+		Codec:          cd.NewCodec(),
 		keyring:        kr,
 		log:            log,
 	}
@@ -116,7 +116,7 @@ func (c *ChainClient) GetSignedTxBytes(
 	}
 
 	gasPrice := defaultGasPrice
-	txBuilder := c.codec.GetTxConfig().NewTxBuilder()
+	txBuilder := c.Codec.GetTxConfig().NewTxBuilder()
 	if err := txBuilder.SetMsgs(msg); err != nil {
 		return nil, fmt.Errorf("set msg error: %s", err)
 	}
@@ -126,7 +126,7 @@ func (c *ChainClient) GetSignedTxBytes(
 		WithChainID(c.chainID).
 		WithAccountNumber(acc.Number).
 		WithSequence(acc.Sequence).
-		WithTxConfig(c.codec.GetTxConfig())
+		WithTxConfig(c.Codec.GetTxConfig())
 
 	txBuilder.SetFeeAmount(gasPrice)
 	txBuilder.SetGasLimit(gasPrice.AmountOf(denom).Mul(math.NewInt(2)).Uint64())
@@ -135,7 +135,7 @@ func (c *ChainClient) GetSignedTxBytes(
 		return nil, fmt.Errorf("sign tx error: %s", err)
 	}
 
-	txBytes, err := c.codec.GetTxConfig().TxEncoder()(txBuilder.GetTx())
+	txBytes, err := c.Codec.GetTxConfig().TxEncoder()(txBuilder.GetTx())
 	if err != nil {
 		return nil, fmt.Errorf("tx encode error: %s", err)
 	}
