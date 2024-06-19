@@ -3,22 +3,108 @@ package internal
 import (
 	"bytes"
 	"context"
+	"errors"
+	"time"
 
 	"github.com/ava-labs/avalanchego/utils/logging"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"go.uber.org/zap"
 )
 
+// RunKVStoreTests runs the key value store tests
 func RunKVStoreTests(rpcAddr string, log logging.Logger) {
 	c, err := rpchttp.New(rpcAddr, "/websocket")
 	if err != nil {
 		log.Fatal("error creating client", zap.Error(err)) //nolint:gocritic
 	}
+	<-time.After(2 * time.Second) // wait for first block to be committed
 
 	CheckTX(c, log)
 	Info(c, log)
 	Query(c, log)
 	Commit(c, log)
+
+	GenerateTXSAsync(c, log, 200)
+}
+
+// GenerateTXSAsync generates num transactions asynchronously
+// and waits for them to be committed
+func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int) {
+	type KV struct {
+		k []byte
+		v []byte
+	}
+
+	kvs := make([]KV, num)
+
+	for i := 0; i < num; i++ {
+		// Create a transaction
+		k, v, tx := MakeTxKV()
+
+		res, err := c.BroadcastTxAsync(context.Background(), tx)
+		if err != nil {
+			log.Fatal("BroadcastTxAsync error", zap.Error(err))
+			return
+		}
+
+		if res.Code != 0 {
+			log.Fatal("BroadcastTxAsync transaction failed", zap.Uint32("code", res.Code))
+			return
+		}
+
+		// store the key value pair
+		kvs[i] = KV{k, v}
+
+		// wait for 100 milliseconds
+		<-time.After(100 * time.Millisecond)
+	}
+	// wait for 15 seconds to let the transactions be committed
+	<-time.After(15 * time.Second)
+
+	// 30 attempts to query the key value store with delay of 5 seconds
+	for j := 0; j < 30; j++ {
+		if len(kvs) == 0 {
+			log.Info("All transactions are committed")
+			break
+		}
+
+		for i := 0; i < len(kvs); i++ {
+			err := ABCIQuery(c, log, kvs[i].k, kvs[i].v)
+			if err != nil {
+				// wait for 5 seconds for block acceptance
+				<-time.After(5 * time.Second)
+				break
+			}
+			// remove the key value pair
+			kvs = append(kvs[:i], kvs[i+1:]...)
+			i--
+		}
+	}
+}
+
+// ABCIQuery queries the key value store
+func ABCIQuery(c *rpchttp.HTTP, log logging.Logger, k, v []byte) error {
+	abcires, err := c.ABCIQuery(context.Background(), "/key", k)
+	if err != nil {
+		log.Fatal("ABCIQuery failed", zap.Error(err))
+		return err
+	}
+	if abcires.Response.IsErr() {
+		log.Fatal("ABCIQuery failed")
+		return errors.New("ABCIQuery failed")
+	}
+	if !bytes.Equal(abcires.Response.Key, k) {
+		log.Fatal("ABCIQuery returned key does not match queried key")
+		return errors.New("ABCIQuery returned key does not match queried key")
+	}
+	if !bytes.Equal(abcires.Response.Value, v) {
+		log.Info("ABCIQuery", zap.String("value", string(abcires.Response.Value)), zap.String("expected", string(v)))
+		log.Fatal("ABCIQuery returned value does not match sent value")
+		return errors.New("ABCIQuery returned value does not match sent value")
+	}
+	log.Info("ABCIQuery success", zap.String("resp", string(abcires.Response.Key)), zap.String("value", string(abcires.Response.Value)))
+
+	return nil
 }
 
 func CheckTX(c *rpchttp.HTTP, log logging.Logger) {
