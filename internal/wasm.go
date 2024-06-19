@@ -70,7 +70,11 @@ func RunWASMTests(rpcAddrs []string, log logging.Logger, nameserviceDeployHex st
 
 		if deployResultTx.TxResult.Code != 0 {
 			log.Fatal("error deploying wasm contract", zap.Error(err))
+			break
 		}
+
+		log.Info("Success! transaction committed")
+		break
 	}
 
 }

@@ -35,7 +35,7 @@ func BankSendTxHex(
 		Amount:      types.NewCoins(types.NewCoin(denom, math.NewInt(int64(amount)))),
 	}
 
-	txBytes, err := client.GetSignedTxBytes(from, msg)
+	txBytes, err := client.GetSignedTxBytes(from, msg, 0)
 	if err != nil {
 		log.Fatalf("error getting signed tx bytes: %v", err)
 		return

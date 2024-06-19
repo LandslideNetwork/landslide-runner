@@ -104,6 +104,7 @@ func (c *ChainClient) IncreaseSequence(name string) error {
 func (c *ChainClient) GetSignedTxBytes(
 	signerAccountName string,
 	msg types.Msg,
+	gasPriceOverride uint64,
 ) ([]byte, error) {
 	signer, err := c.keyring.Key(signerAccountName)
 	if err != nil {
@@ -115,7 +116,13 @@ func (c *ChainClient) GetSignedTxBytes(
 		return nil, fmt.Errorf("account not found")
 	}
 
-	gasPrice := defaultGasPrice
+	var gasPrice sdk.Coins
+	if gasPriceOverride == 0 {
+		gasPrice = defaultGasPrice
+	} else {
+		gasPrice = sdk.NewCoins(sdk.NewCoin(denom, math.NewInt(int64(gasPriceOverride))))
+	}
+
 	txBuilder := c.Codec.GetTxConfig().NewTxBuilder()
 	if err := txBuilder.SetMsgs(msg); err != nil {
 		return nil, fmt.Errorf("set msg error: %s", err)

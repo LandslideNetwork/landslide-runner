@@ -7,8 +7,6 @@ import (
 	"github.com/CosmWasm/wasmd/x/wasm"
 	"github.com/CosmWasm/wasmd/x/wasm/types"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/encoding"
-	"google.golang.org/grpc/encoding/proto"
 )
 
 func DeployContractHex(
@@ -23,7 +21,7 @@ func DeployContractHex(
 		log.Fatalf("account not found")
 		return
 	}
-	req := &wasm.MsgStoreCode{
+	msg := &wasm.MsgStoreCode{
 		Sender:       signer.Address,
 		WASMByteCode: nameserviceWasm,
 		InstantiatePermission: &types.AccessConfig{
@@ -31,31 +29,16 @@ func DeployContractHex(
 		},
 	}
 
-	codec := encoding.GetCodec(proto.Name)
-
-	queryArgs, err := codec.Marshal(req)
+	txBytes, err := client.GetSignedTxBytes(from, msg, 2000000)
 	if err != nil {
-		log.Fatalf("error marshaling request: %v", err)
+		log.Fatalf("error getting signed tx bytes: %v", err)
 		return
 	}
 
-	queryHex := hex.EncodeToString(queryArgs)
-	// Write queryHex to file
-	err = os.WriteFile(filePath, []byte(queryHex), 0644)
+	// Write hex to file
+	err = os.WriteFile(filePath, []byte(hex.EncodeToString(txBytes)), 0644)
 	if err != nil {
 		log.Fatalf("error writing to file: %v", err)
-		return
-	}
-
-	decodedBytes, err := hex.DecodeString(queryHex)
-	if err != nil {
-		log.Fatalf("error decoding hex: %v", err)
-		return
-	}
-
-	err = encoding.GetCodec(proto.Name).Unmarshal(decodedBytes, req)
-	if err != nil {
-		log.Fatalf("error unmarshaling request: %v", err)
 		return
 	}
 
