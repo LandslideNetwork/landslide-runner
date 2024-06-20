@@ -44,8 +44,8 @@ func main() {
 	}
 	log.Infof("user2 address: %s", acc2.Address)
 
-	internal.GetQueryAllBalancesRequestHex(acc1.Address, log)
-	internal.GetQueryAllBalancesRequestHex(acc2.Address, log)
+	internal.GetQueryAllBalancesRequestHex(log, acc1.Address)
+	internal.GetQueryAllBalancesRequestHex(log, acc2.Address)
 
 	internal.BankSendTxHex(client, log, "user1", "user2", 5000000)
 	err = client.IncreaseSequence("user1")
@@ -53,5 +53,15 @@ func main() {
 		log.Fatalf("error increasing sequence: %v", err)
 	}
 
-	internal.DeployContractHex(client, log, "user1", nameserviceWasm, "testdata/nameservice.wasm.hex")
+	// internal.DeployContractHex(client, log, "user1", nameserviceWasm, "testdata/nameservice.wasm.hex")
+	err = client.IncreaseSequence("user1")
+
+	internal.MsgInstantiateContractHex(client, log, "user1")
+	err = client.IncreaseSequence("user1")
+
+	const smartContractAddress = "wasm14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s0phg4d"
+	internal.MsgExecuteContractHex(client, log, "user1", smartContractAddress)
+	err = client.IncreaseSequence("user1")
+
+	internal.GetQuerySmartContractStateRequestHex(log, smartContractAddress)
 }

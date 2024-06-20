@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"cosmossdk.io/math"
 	"github.com/cosmos/cosmos-sdk/codec"
 	cdctypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
@@ -14,7 +13,7 @@ const (
 	chainID = "landslide-test"
 )
 
-var defaultGasPrice = sdk.NewCoins(sdk.NewCoin(denom, math.NewInt(100000)))
+var defaultGasPrice = sdk.NewCoins(sdk.NewInt64Coin(denom, 100000))
 
 const (
 	User1Mnemonic = "tip yard art tape orchard universe angle flame wave gadget raven coyote crater ethics able evoke luxury predict leopard delay peanut embody blast soap"
@@ -45,6 +44,7 @@ func getProtoCodec() codec.Codec {
 	return codec.NewProtoCodec(registry)
 }
 
+// NewKeyring - create new keyring.
 func NewKeyring() (keyring.Keyring, error) {
 	kr, err := keyring.New(sdk.KeyringServiceName(), keyring.BackendMemory, "", nil, getProtoCodec())
 	if err != nil {

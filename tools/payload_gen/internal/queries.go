@@ -3,6 +3,7 @@ package internal
 import (
 	"encoding/hex"
 
+	"github.com/CosmWasm/wasmd/x/wasm/types"
 	bank "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/encoding"
@@ -10,35 +11,41 @@ import (
 )
 
 // GetQueryAllBalancesRequestHex creates a QueryAllBalancesRequest protobuf message and prints the hex encoded query
-func GetQueryAllBalancesRequestHex(address string, log *zap.SugaredLogger) {
-	// // Create a QueryAllBalancesRequest protobuf message
+func GetQueryAllBalancesRequestHex(log *zap.SugaredLogger, address string) {
 	req := &bank.QueryAllBalancesRequest{
 		Address: address,
 	}
 
-	codec := encoding.GetCodec(proto.Name)
-
-	queryArgs, err := codec.Marshal(req)
+	queryArgs, err := encoding.GetCodec(proto.Name).Marshal(req)
 	if err != nil {
 		log.Fatalf("error marshaling request: %v", err)
 		return
 	}
 
-	// convert to hex
-	queryHex := hex.EncodeToString(queryArgs)
-	// Print the hex encoded query
-	log.Infof("QueryAllBalancesRequest hex encoded for address %s: %s", address, queryHex)
+	log.Infof(
+		"QueryAllBalancesRequest hex encoded for address %s: %s",
+		address,
+		hex.EncodeToString(queryArgs),
+	)
+}
 
-	// decode hex back to bytes
-	decodedBytes, err := hex.DecodeString(queryHex)
+// GetQuerySmartContractStateRequestHex creates a GetQuerySmartContractStateRequestHex protobuf message
+// and prints the hex encoded query
+func GetQuerySmartContractStateRequestHex(log *zap.SugaredLogger, rawContractAddress string) {
+	req := &types.QuerySmartContractStateRequest{
+		Address:   rawContractAddress,
+		QueryData: []byte(`{"resolve_record": {"name": "cidt"}}`),
+	}
+
+	queryArgs, err := encoding.GetCodec(proto.Name).Marshal(req)
 	if err != nil {
-		log.Fatalf("error decoding hex: %v", err)
+		log.Fatalf("error marshaling request: %v", err)
 		return
 	}
-	// decode back to bank.QueryAllBalancesRequest
-	err = encoding.GetCodec(proto.Name).Unmarshal(decodedBytes, req)
-	if err != nil {
-		log.Fatalf("error unmarshaling request: %v", err)
-		return
-	}
+
+	log.Infof(
+		"QuerySmartContractStateRequest hex encoded for address %s: %s",
+		rawContractAddress,
+		hex.EncodeToString(queryArgs),
+	)
 }

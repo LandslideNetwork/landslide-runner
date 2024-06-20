@@ -16,6 +16,7 @@ var decodedBalances = map[string]string{
 	"0a100a057374616b6512073530303030303012021001":     "balances:<denom:\"stake\" amount:\"5000000\" > pagination:<total:1 >",
 }
 
+// GetBalances queries the balances of an address
 func GetBalances(c *rpchttp.HTTP, log logging.Logger, address, querystring string) {
 	// Define the path for the balance query
 	queryPath := "/cosmos.bank.v1beta1.Query/AllBalances"
@@ -43,9 +44,8 @@ func GetBalances(c *rpchttp.HTTP, log logging.Logger, address, querystring strin
 		return
 	}
 
-	// The balance is returned in the response value
-	// encode the balance to hex
 	balanceHex := hex.EncodeToString(resABCIQuery.Response.Value)
+
 	// Print the balance from decodedBalances if exists
 	if decoded, ok := decodedBalances[balanceHex]; ok {
 		log.Info("Balance query success", zap.String("address", address), zap.String("balance", decoded))
@@ -53,4 +53,40 @@ func GetBalances(c *rpchttp.HTTP, log logging.Logger, address, querystring strin
 	} else {
 		log.Error("Balance query failed", zap.String("address", address), zap.String("balance", balanceHex))
 	}
+}
+
+// QuerySmartContractStateRequest queries the state of a smart contract
+func QuerySmartContractStateRequest(c *rpchttp.HTTP, log logging.Logger, address, querystring string) {
+	// Define the path for the SmartContractState query
+	queryPath := "/cosmwasm.wasm.v1.Query/SmartContractState"
+
+	reqBytes, err := hex.DecodeString(querystring)
+	if err != nil {
+		log.Fatal("error decoding hex: %v", zap.Error(err))
+		return
+	}
+
+	// Perform the query
+	resABCIQuery, err := c.ABCIQuery(context.Background(), queryPath, reqBytes)
+	if err != nil {
+		log.Fatal("ABCIQuery failed", zap.Error(err))
+		return
+	}
+
+	if resABCIQuery.Response.IsErr() {
+		log.Fatal("ABCIQuery failed", zap.String("response", resABCIQuery.Response.Log))
+		return
+	}
+
+	if resABCIQuery.Response.Code != 0 {
+		log.Fatal("ABCIQuery failed", zap.String("response", resABCIQuery.Response.Log))
+		return
+	}
+
+	log.Info(
+		"QuerySmartContractStateRequest success",
+		zap.String("address", address),
+		zap.String("resABCIQuery.Response.Value", string(resABCIQuery.Response.Value)),
+		zap.String("responseHex", hex.EncodeToString(resABCIQuery.Response.Value)),
+	)
 }

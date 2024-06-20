@@ -18,7 +18,20 @@ import (
 // SetPrefixes - set prefixes for the chain.
 const prefix = "wasm"
 
+var _ ChainClientInterface = &ChainClient{}
+
+// ChainClientInterface - chain client interface.
+// It is used to interact with the blockchain,
+// perform transactions, and manage accounts.
+type ChainClientInterface interface {
+	AddAccount(name, mnemonic string, sequence, number uint64)
+	GetAccount(name string) (AccountInfo, bool)
+	IncreaseSequence(name string) error
+	GetSignedTxBytes(signerAccountName string, msg types.Msg, gasPriceOverride uint64) ([]byte, error)
+}
+
 type (
+	// AccountInfo - account information.
 	AccountInfo struct {
 		Name     string
 		Mnemonic string
@@ -27,6 +40,7 @@ type (
 		Address  string
 	}
 
+	// ChainClient - chain client.
 	ChainClient struct {
 		chainID        string
 		gasLimit       uint64
@@ -111,32 +125,36 @@ func (c *ChainClient) GetSignedTxBytes(
 		return nil, fmt.Errorf("not found signer: %s", err)
 	}
 
+	// Get the account from the keyring
 	acc, exists := c.GetAccount(signerAccountName)
 	if !exists {
 		return nil, fmt.Errorf("account not found")
 	}
 
+	// Set the gas price
 	var gasPrice sdk.Coins
 	if gasPriceOverride == 0 {
 		gasPrice = defaultGasPrice
 	} else {
-		gasPrice = sdk.NewCoins(sdk.NewCoin(denom, math.NewInt(int64(gasPriceOverride))))
+		gasPrice = sdk.NewCoins(sdk.NewInt64Coin(denom, int64(gasPriceOverride)))
 	}
 
+	// Create a new tx builder and set the message
 	txBuilder := c.Codec.GetTxConfig().NewTxBuilder()
 	if err := txBuilder.SetMsgs(msg); err != nil {
 		return nil, fmt.Errorf("set msg error: %s", err)
 	}
+	// Set the fee amount and gas limit
+	txBuilder.SetFeeAmount(gasPrice)
+	txBuilder.SetGasLimit(gasPrice.AmountOf(denom).Mul(math.NewInt(2)).Uint64())
 
+	// Sign the transaction
 	factory := tx.Factory{}.
 		WithKeybase(c.keyring).
 		WithChainID(c.chainID).
 		WithAccountNumber(acc.Number).
 		WithSequence(acc.Sequence).
 		WithTxConfig(c.Codec.GetTxConfig())
-
-	txBuilder.SetFeeAmount(gasPrice)
-	txBuilder.SetGasLimit(gasPrice.AmountOf(denom).Mul(math.NewInt(2)).Uint64())
 
 	if err := tx.Sign(context.Background(), factory, signer.Name, txBuilder, true); err != nil {
 		return nil, fmt.Errorf("sign tx error: %s", err)
