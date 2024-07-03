@@ -210,7 +210,7 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		}
 
 		// Add per node chain config
-		cfg := fmt.Sprintf(`{"warp-api-enabled": true, "grpc_port": %d}`, grpcPort)
+		cfg := fmt.Sprintf(`{"warp-api-enabled": true, "grpc_port": %d, "rpc_port": %d}`, grpcPort, node.GetAPIPort())
 		perNodeChainConfig[node.GetName()] = []byte(cfg)
 		grpcPort++
 	}
