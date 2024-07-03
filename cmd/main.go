@@ -22,6 +22,7 @@ import (
 const (
 	healthyTimeout = 2 * time.Minute
 	subnetFileName = "pjSL9ksard4YE96omaiTkGL5H6XX2W5VEo3ZgWC9S2P6gzs9A"
+	networkName    = "landslide-test"
 )
 
 var (
@@ -210,7 +211,12 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		}
 
 		// Add per node chain config
-		cfg := fmt.Sprintf(`{"warp-api-enabled": true, "grpc_port": %d, "rpc_port": %d}`, grpcPort, node.GetAPIPort())
+		cfg := fmt.Sprintf(
+			`{"warp-api-enabled": true, "grpc_port": %d, "rpc_port": %d, "network_name": "%s"}`,
+			grpcPort,
+			node.GetAPIPort(),
+			networkName,
+		)
 		perNodeChainConfig[node.GetName()] = []byte(cfg)
 		grpcPort++
 	}
