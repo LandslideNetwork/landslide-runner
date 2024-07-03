@@ -197,6 +197,7 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 
 	perNodeChainConfig := make(map[string][]byte)
 	grpcPort := 9090
+	rpcPort := 26657
 	for i := range nodeNames {
 		node, err := nw.GetNode(nodeNames[i])
 		if err != nil {
@@ -210,9 +211,10 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		}
 
 		// Add per node chain config
-		cfg := fmt.Sprintf(`{"warp-api-enabled": true, "grpc_port": %d}`, grpcPort)
+		cfg := fmt.Sprintf(`{"warp-api-enabled": true, "grpc_port": %d, "rpc_port": %d}`, grpcPort, rpcPort)
 		perNodeChainConfig[node.GetName()] = []byte(cfg)
 		grpcPort++
+		rpcPort++
 	}
 
 	chains, err := nw.CreateBlockchains(context.Background(), []network.BlockchainSpec{
