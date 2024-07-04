@@ -25,6 +25,8 @@ const LOCAL_LANDSLIDE_NETWORK: NetworkInfo = NetworkInfo {
 
 // cargo run --example deploy
 pub fn main() -> anyhow::Result<()> {
+  // Set the `RUST_LOG` environment variable to `info`
+    std::env::set_var("RUST_LOG", "info");
     std::env::set_var("LOCAL_MNEMONIC", LOCAL_MNEMONIC);
     // ANCHOR: chain_construction
     dotenv::dotenv().ok(); // Used to load the `.env` file if any
