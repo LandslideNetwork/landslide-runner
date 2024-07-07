@@ -20,8 +20,10 @@ import (
 )
 
 const (
-	healthyTimeout = 2 * time.Minute
-	subnetFileName = "pjSL9ksard4YE96omaiTkGL5H6XX2W5VEo3ZgWC9S2P6gzs9A"
+	healthyTimeout  = 2 * time.Minute
+	subnetFileName  = "pjSL9ksard4YE96omaiTkGL5H6XX2W5VEo3ZgWC9S2P6gzs9A"
+	networkName     = "landslide-test"
+	defaultGrpcPort = 9090
 )
 
 var (
@@ -195,6 +197,8 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		return nil, err
 	}
 
+	perNodeChainConfig := make(map[string][]byte)
+	grpcPort := defaultGrpcPort
 	for i := range nodeNames {
 		node, err := nw.GetNode(nodeNames[i])
 		if err != nil {
@@ -206,17 +210,28 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		); err != nil {
 			return nil, err
 		}
+
+		// Add per node chain config
+		cfg := fmt.Sprintf(
+			`{"warp-api-enabled": true, "grpc_port": %d, "rpc_port": %d, "network_name": "%s"}`,
+			grpcPort,
+			node.GetAPIPort(),
+			networkName,
+		)
+		perNodeChainConfig[node.GetName()] = []byte(cfg)
+		grpcPort++
 	}
 
 	chains, err := nw.CreateBlockchains(context.Background(), []network.BlockchainSpec{
 		{
 			VMName:      "landslidevm",
 			Genesis:     genesis,
-			ChainConfig: []byte(`{"warp-api-enabled": true}`),
+			ChainConfig: []byte(`{"warp-api-enabled": true, "grpc_port": 9090}`),
 			SubnetSpec: &network.SubnetSpec{
 				SubnetConfig: nil,
 				Participants: nodeNames,
 			},
+			PerNodeChainConfig: perNodeChainConfig,
 		},
 	})
 	if err != nil {
@@ -229,13 +244,21 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 	}
 
 	rpcUrls := make([]string, len(nodeNames))
+	grpcUrls := make([]string, len(nodeNames))
+	grpcPort = defaultGrpcPort
 	for i := range nodeNames {
 		node, err := nw.GetNode(nodeNames[i])
 		if err != nil {
 			return nil, err
 		}
 		rpcUrls[i] = fmt.Sprintf("http://127.0.0.1:%d/ext/bc/%s/rpc", node.GetAPIPort(), chains[0])
-		log.Info("subnet rpc url", zap.String("node", nodeNames[i]), zap.String("url", rpcUrls[i]))
+		grpcUrls[i] = fmt.Sprintf("http://127.0.0.1:%d", grpcPort)
+		log.Info("subnet rpc url",
+			zap.String("node", nodeNames[i]),
+			zap.String("rpc", rpcUrls[i]),
+			zap.String("grpc", grpcUrls[i]),
+		)
+		grpcPort++
 	}
 
 	return rpcUrls, nil
