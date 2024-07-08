@@ -23,7 +23,6 @@ import (
 const (
 	healthyTimeout         = 2 * time.Minute
 	subnetFileName         = "pjSL9ksard4YE96omaiTkGL5H6XX2W5VEo3ZgWC9S2P6gzs9A"
-	networkName            = "landslide-test"
 	defaultGrpcPort uint16 = 9090
 )
 
@@ -198,8 +197,9 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		return nil, err
 	}
 
-	vmCfg := internal.VMConfig{}
-	vmCfg.SetDefaults()
+	vmCfg := internal.Config{}
+	vmCfg.VMConfig.SetDefaults()
+	appCfg := internal.AppConfig{}
 
 	perNodeChainConfig := make(map[string][]byte)
 	grpcPort := defaultGrpcPort
@@ -215,8 +215,15 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 			return nil, err
 		}
 
-		vmCfg.RPCConfig.GRPCPort = grpcPort
-		vmCfg.RPCConfig.RPCPort = node.GetAPIPort()
+		appCfg.GRPCPort = grpcPort
+		appCfg.RPCPort = node.GetAPIPort()
+
+		// Marshal the AppConfig into JSON
+		appConfigJSON, err := json.Marshal(appCfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal AppConfig: %w", err)
+		}
+		vmCfg.AppConfig = appConfigJSON
 
 		cfgBytes, err := json.Marshal(vmCfg)
 		if err != nil {
@@ -231,7 +238,7 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		{
 			VMName:      "landslidevm",
 			Genesis:     genesis,
-			ChainConfig: []byte(`{"warp-api-enabled": true}`),
+			ChainConfig: []byte{},
 			SubnetSpec: &network.SubnetSpec{
 				SubnetConfig: nil,
 				Participants: nodeNames,
