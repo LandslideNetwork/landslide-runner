@@ -1,4 +1,4 @@
-package main
+package t_test
 
 import (
 	"testing"
@@ -12,4 +12,7 @@ func TestSubnetName(t *testing.T) {
 
 	landslideVm := ids.ID{'l', 'a', 'n', 'd', 's', 'l', 'i', 'd', 'e', 'v', 'm'}
 	t.Logf("LandslideVM: %s", landslideVm.String())
+
+	landslideWasm := ids.ID{'l', 'a', 'n', 'd', 's', 'l', 'i', 'd', 'e', 'w', 'a', 's', 'm'}
+	t.Logf("LandslideWasm: %s", landslideWasm.String())
 }

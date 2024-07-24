@@ -189,10 +189,18 @@ Run following command from [landslidevm](https://github.com/ConsiderItDone/lands
 ./scripts/build_wasm.sh /tmp/e2e-test-landslide/avalanchego/plugins/pjSL9ksard4YE96omaiTkGL5H6XX2W5VEo3ZgWC9S2P6gzs9A
 ```
 
-### Run subnet
+### Run wasm subnet
 
 To spin up avalanche node with Landslide Subnet deployed run:
 
 ```shell
 make run-wasm
+```
+
+### Wasm end-to-end tests
+
+To run e2e tests:
+
+```shell
+make e2e-wasm 
 ```
