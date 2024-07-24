@@ -12,6 +12,7 @@ import (
 	"github.com/ava-labs/avalanche-network-runner/network"
 	"github.com/ava-labs/avalanchego/config"
 	"github.com/ava-labs/avalanchego/utils/logging"
+	"github.com/cometbft/cometbft/libs/json"
 	"github.com/urfave/cli/v2"
 
 	"go.uber.org/zap"
@@ -20,10 +21,9 @@ import (
 )
 
 const (
-	healthyTimeout  = 2 * time.Minute
-	subnetFileName  = "pjSL9ksard4YE96omaiTkGL5H6XX2W5VEo3ZgWC9S2P6gzs9A"
-	networkName     = "landslide-test"
-	defaultGrpcPort = 9090
+	healthyTimeout         = 2 * time.Minute
+	subnetFileName         = "pjSL9ksard4YE96omaiTkGL5H6XX2W5VEo3ZgWC9S2P6gzs9A"
+	defaultGrpcPort uint16 = 9090
 )
 
 var (
@@ -197,6 +197,10 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		return nil, err
 	}
 
+	vmCfg := internal.Config{}
+	vmCfg.VMConfig.SetDefaults()
+	appCfg := internal.AppConfig{}
+
 	perNodeChainConfig := make(map[string][]byte)
 	grpcPort := defaultGrpcPort
 	for i := range nodeNames {
@@ -211,14 +215,22 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 			return nil, err
 		}
 
-		// Add per node chain config
-		cfg := fmt.Sprintf(
-			`{"warp-api-enabled": true, "grpc_port": %d, "rpc_port": %d, "network_name": "%s"}`,
-			grpcPort,
-			node.GetAPIPort(),
-			networkName,
-		)
-		perNodeChainConfig[node.GetName()] = []byte(cfg)
+		appCfg.GRPCPort = grpcPort
+		appCfg.RPCPort = node.GetAPIPort()
+
+		// Marshal the AppConfig into JSON
+		appConfigJSON, err := json.Marshal(appCfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal AppConfig: %w", err)
+		}
+		vmCfg.AppConfig = appConfigJSON
+
+		cfgBytes, err := json.Marshal(vmCfg)
+		if err != nil {
+			return nil, err
+		}
+
+		perNodeChainConfig[node.GetName()] = cfgBytes
 		grpcPort++
 	}
 
@@ -226,7 +238,7 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		{
 			VMName:      "landslidevm",
 			Genesis:     genesis,
-			ChainConfig: []byte(`{"warp-api-enabled": true, "grpc_port": 9090}`),
+			ChainConfig: []byte{},
 			SubnetSpec: &network.SubnetSpec{
 				SubnetConfig: nil,
 				Participants: nodeNames,
