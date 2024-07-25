@@ -10,7 +10,7 @@ import (
 
 const (
 	denom   = "stake"
-	chainID = "landslide-test"
+	ChainID = "landslide-test"
 )
 
 var defaultGasPrice = sdk.NewCoins(sdk.NewInt64Coin(denom, 100000))

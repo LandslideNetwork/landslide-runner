@@ -64,7 +64,7 @@ func NewChainClient(
 	}
 
 	return &ChainClient{
-		chainID:        chainID,
+		chainID:        ChainID,
 		gasLimit:       gasLimit,
 		signerAccounts: make(map[string]AccountInfo),
 		Codec:          cd.NewCodec(),
