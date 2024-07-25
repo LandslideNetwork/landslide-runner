@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
@@ -33,7 +34,7 @@ func (s *chainService) WaitTx(txHash []byte) (*coretypes.ResultTx, error) {
 		<-time.After(5 * time.Second)
 		execResultTx, err := s.c.Tx(context.Background(), txHash, false)
 		if err != nil {
-			s.log.Error("Error getting transaction", zap.Error(err))
+			s.log.Info("Error getting transaction, waiting another 5 sek...")
 			continue
 		}
 
@@ -49,10 +50,15 @@ func (s *chainService) WaitTx(txHash []byte) (*coretypes.ResultTx, error) {
 	return nil, errors.New("WaitTx failed")
 }
 
+// Info - get chain info
 func (s *chainService) Info() {
 	res, err := s.c.NetInfo(context.Background())
 	if err != nil {
-		s.log.Fatal("error NetInfo", zap.Error(err))
+		if strings.Contains(err.Error(), "Status: 404 Not Found") {
+			s.log.Fatal("Invalid RPC address, no connection.", zap.Error(err))
+		} else {
+			s.log.Fatal("error NetInfo", zap.Error(err))
+		}
 		return
 	}
 	s.log.Info("NetInfo success: ", zap.Any("res", res))
@@ -77,5 +83,6 @@ func (s *chainService) Info() {
 		s.log.Fatal("BlockchainInfo failed")
 		return
 	}
+
 	s.log.Info("BlockchainInfo success: ", zap.Any("resBc", resBc))
 }

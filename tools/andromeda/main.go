@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
+	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -12,7 +14,7 @@ import (
 
 const (
 	// rpcAddr is the address of the RPC server
-	rpcAddr = "http://127.0.0.1:9750/ext/bc/2B3qDLRgCPR8fN8BCdEDKZ3VLt4E3WE7YjmPRn2XGimPGVwi4P/rpc"
+	rpcAddr = "http://127.0.0.1:9750/ext/bc/2tkCSENQ3Fcpexgv4g6ZgnPzBAzPrkNkV8eEe2TpLGrC3tt2TL/rpc"
 
 	// user1 and user2 are the names of the accounts
 	user1 = "user1"
@@ -88,11 +90,29 @@ func main() {
 		log.Fatal("error instantiating wasm contract", zap.Error(err))
 		return
 	}
+
+	rawContractCodeID, rawContractAddress, err := extractContractDetails(deployResTx)
+	if err != nil {
+		log.Fatal("error extracting contract details", zap.Error(err))
+		return
+	}
+	log.Info(
+		"committed contract info: ",
+		zap.String("contract_address", rawContractAddress),
+		zap.String("code_id", rawContractCodeID),
+	)
+
+	// wasm14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s0phg4d
+}
+
+// extractContractDetails extracts contract details from the transaction
+func extractContractDetails(deployResTx *coretypes.ResultTx) (string, string, error) {
 	var (
 		rawContractCodeID     string
 		rawContractAddress    string
 		instantiateEventFound bool
 	)
+
 	for _, event := range deployResTx.TxResult.GetEvents() {
 		if event.Type == "instantiate" {
 			for _, attr := range event.Attributes {
@@ -109,18 +129,12 @@ func main() {
 	}
 
 	if !instantiateEventFound {
-		log.Fatal("error instantiating wasm contract")
-		return
+		return "", "", errors.New("error instantiating wasm contract")
 	}
 
 	if rawContractAddress == "" || rawContractCodeID == "" {
-		log.Fatal("error instantiating wasm contract, rawContractAddress or rawContractCodeID is empty")
-		return
+		return "", "", errors.New("error instantiating wasm contract, rawContractAddress or rawContractCodeID is empty")
 	}
 
-	log.Info(
-		"committed contract: ",
-		zap.String("contract_address", rawContractAddress),
-		zap.String("code_id", rawContractCodeID),
-	)
+	return rawContractCodeID, rawContractAddress, nil
 }
