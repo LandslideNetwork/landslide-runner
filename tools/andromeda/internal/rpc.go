@@ -39,7 +39,7 @@ func (s *chainService) WaitTx(txHash []byte) (*coretypes.ResultTx, error) {
 		}
 
 		if execResultTx.TxResult.Code != 0 {
-			s.log.Error("Error executing wasm contract", zap.Error(err))
+			s.log.Warn("execResultTx.TxResult.Code != 0", zap.String("Log", execResultTx.TxResult.Log))
 			return nil, errors.New("error executing wasm contract")
 		}
 

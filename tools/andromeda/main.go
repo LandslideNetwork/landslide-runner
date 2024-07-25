@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
@@ -13,8 +15,11 @@ import (
 )
 
 const (
+	// blockchainID is the ID of the blockchain, which is used in the RPC address
+	blockchainID = "2qNyrxA2g2S2bD1wgP1cPdK9hSH9paxD4JeCcpNHXahHakRNvY"
+
 	// rpcAddr is the address of the RPC server
-	rpcAddr = "http://127.0.0.1:9750/ext/bc/2tkCSENQ3Fcpexgv4g6ZgnPzBAzPrkNkV8eEe2TpLGrC3tt2TL/rpc"
+	rpcAddr = "http://127.0.0.1:9750/ext/bc/" + blockchainID + "/rpc"
 
 	// user1 and user2 are the names of the accounts
 	user1 = "user1"
@@ -72,9 +77,16 @@ func main() {
 
 	// store kernel code
 	// upload andromeda_kernel.wasm
-	_, err = chainService.StoreCodeKernel(user1, "./artifacts/andromeda_kernel.wasm", 4000000)
+	txRes, err := chainService.DeployContract(user1, "./artifacts/andromeda_kernel.wasm", 4000000)
 	if err != nil {
 		log.Fatal("error storing kernel code", zap.Error(err))
+		return
+	}
+
+	rawKernelCodeID, _, err := extractResultTxDetails(txRes)
+	kernelCodeId, err := strconv.ParseUint(rawKernelCodeID, 10, 64)
+	if err != nil {
+		log.Fatal("error parsing kernel code id", zap.Error(err))
 		return
 	}
 
@@ -85,13 +97,13 @@ func main() {
 	}
 
 	msg := []byte(fmt.Sprintf(`{"chain_name": "%s", "owner": "%s"}`, internal.ChainID, acc1.Address))
-	deployResTx, err := chainService.InstantiateContract(user1, msg, 4000000)
+	txRes, err = chainService.InstantiateContract(user1, kernelCodeId, msg, 2000000)
 	if err != nil {
 		log.Fatal("error instantiating wasm contract", zap.Error(err))
 		return
 	}
 
-	rawContractCodeID, rawContractAddress, err := extractContractDetails(deployResTx)
+	rawContractCodeID, rawContractAddress, err := extractResultTxDetails(txRes)
 	if err != nil {
 		log.Fatal("error extracting contract details", zap.Error(err))
 		return
@@ -102,19 +114,78 @@ func main() {
 		zap.String("code_id", rawContractCodeID),
 	)
 
-	// wasm14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s0phg4d
+	// store vfs code
+	// upload andromeda_vfs.wasm
+	err = client.IncreaseSequence(user1)
+	if err != nil {
+		log.Fatal("error increasing sequence", zap.Error(err))
+		return
+	}
+
+	txRes, err = chainService.DeployContract(user1, "./artifacts/andromeda_vfs.wasm", 5000000)
+	if err != nil {
+		log.Fatal("error storing andromeda_vfs code", zap.Error(err))
+		return
+	}
+
+	rawVFSCodeID, _, err := extractResultTxDetails(txRes)
+	VFSCodeID, err := strconv.ParseUint(rawVFSCodeID, 10, 64)
+	if err != nil {
+		log.Fatal("error parsing kernel code id", zap.Error(err))
+		return
+	}
+
+	type instantiateVFS struct {
+		KernelAddress string `json:"kernel_address"`
+		Owner         string `json:"owner"`
+	}
+
+	err = client.IncreaseSequence(user1)
+	if err != nil {
+		log.Fatal("error increasing sequence", zap.Error(err))
+		return
+	}
+
+	var msgVFS = instantiateVFS{
+		KernelAddress: rawContractAddress,
+		Owner:         acc1.Address,
+	}
+
+	msgVFSBytes, err := json.Marshal(msgVFS)
+	if err != nil {
+		log.Fatal("error marshaling msgVFS", zap.Error(err))
+		return
+	}
+
+	txRes, err = chainService.InstantiateContract(user1, VFSCodeID, msgVFSBytes, 2000000)
+	if err != nil {
+		log.Fatal("error instantiating wasm contract", zap.Error(err))
+		return
+	}
+
+	rawVFSContractCodeID, rawVFSContractAddress, err := extractResultTxDetails(txRes)
+	if err != nil {
+		log.Fatal("error extracting contract details", zap.Error(err))
+		return
+	}
+	log.Info(
+		"committed contract info: ",
+		zap.String("contract_address", rawVFSContractAddress),
+		zap.String("code_id", rawVFSContractCodeID),
+	)
+
 }
 
-// extractContractDetails extracts contract details from the transaction
-func extractContractDetails(deployResTx *coretypes.ResultTx) (string, string, error) {
+// extractResultTxDetails extracts contract details from the transaction
+func extractResultTxDetails(deployResTx *coretypes.ResultTx) (string, string, error) {
 	var (
-		rawContractCodeID     string
-		rawContractAddress    string
-		instantiateEventFound bool
+		rawContractCodeID  string
+		rawContractAddress string
+		eventFound         bool
 	)
 
 	for _, event := range deployResTx.TxResult.GetEvents() {
-		if event.Type == "instantiate" {
+		if event.Type == "instantiate" || event.Type == "store_code" {
 			for _, attr := range event.Attributes {
 				switch attr.Key {
 				case "_contract_address":
@@ -123,17 +194,17 @@ func extractContractDetails(deployResTx *coretypes.ResultTx) (string, string, er
 					rawContractCodeID = attr.Value
 				}
 			}
-			instantiateEventFound = true
+			eventFound = true
 			break
 		}
 	}
 
-	if !instantiateEventFound {
-		return "", "", errors.New("error instantiating wasm contract")
+	if !eventFound {
+		return "", "", errors.New("event not found, can`t extract result tx details")
 	}
 
-	if rawContractAddress == "" || rawContractCodeID == "" {
-		return "", "", errors.New("error instantiating wasm contract, rawContractAddress or rawContractCodeID is empty")
+	if rawContractAddress == "" && rawContractCodeID == "" {
+		return "", "", errors.New("rawContractAddress and rawContractCodeID is empty")
 	}
 
 	return rawContractCodeID, rawContractAddress, nil

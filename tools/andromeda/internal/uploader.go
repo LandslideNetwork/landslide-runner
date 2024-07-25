@@ -12,21 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-/*
-	{
-	  "ado_type": "crates.io:andromeda-vfs",
-	  "ado_version": "0.1.0", // Replace with the current version of your contract
-	  "kernel_address": "0xYourKernelAddressHere",
-	  "owner": "0xOwnerAddressHere"
-	}
-*/
-type instantiateVFS struct {
-	AdoType       string `json:"ado_type"`
-	AdoVersion    string `json:"ado_version"`
-	KernelAddress string `json:"kernel_address"`
-	Owner         string `json:"owner"`
-}
-
 type chainService struct {
 	client *ChainClient
 	c      *rpchttp.HTTP
@@ -41,10 +26,10 @@ func NewChainService(client *ChainClient, c *rpchttp.HTTP, log *zap.Logger) *cha
 	}
 }
 
-// StoreCodeKernel - store kernel code
+// DeployContract - deploy wasm contract
 //
 // upload "./artifacts/andromeda_kernel.wasm" 4000000
-func (s *chainService) StoreCodeKernel(signerName string, fileName string, gasPrice uint64) (*coretypes.ResultTx, error) {
+func (s *chainService) DeployContract(signerName string, fileName string, gasPrice uint64) (*coretypes.ResultTx, error) {
 	WASMByteCode, err := os.ReadFile(fileName)
 	if err != nil {
 		s.log.Fatal("error reading wasm file", zap.Error(err))
@@ -97,7 +82,7 @@ func (s *chainService) StoreCodeKernel(signerName string, fileName string, gasPr
 }
 
 // InstantiateContract - instantiate wasm contract
-func (s *chainService) InstantiateContract(signerName string, msg []byte, gasPrice uint64) (*coretypes.ResultTx, error) {
+func (s *chainService) InstantiateContract(signerName string, codeID uint64, msg []byte, gasPrice uint64) (*coretypes.ResultTx, error) {
 	acc, ok := s.client.GetAccount(signerName)
 	if !ok {
 		s.log.Fatal("account not found", zap.String("signerName", signerName))
@@ -107,10 +92,10 @@ func (s *chainService) InstantiateContract(signerName string, msg []byte, gasPri
 	// instantiate wasm contract
 	msgInst := &wasm.MsgInstantiateContract{
 		Sender: acc.Address,
-		CodeID: 1,
+		CodeID: codeID,
+		Label:  "testing",
 		Msg:    msg,
 		Funds:  sdk.NewCoins(sdk.NewInt64Coin("stake", 10000)),
-		Label:  "testing",
 	}
 
 	txBytes, err := s.client.GetSignedTxBytes(signerName, msgInst, gasPrice)
