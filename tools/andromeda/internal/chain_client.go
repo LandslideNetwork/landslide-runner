@@ -47,19 +47,19 @@ type (
 		signerAccounts map[string]AccountInfo
 		Codec          cd.Codec
 		keyring        keyring.Keyring
-		log            *zap.SugaredLogger
+		log            *zap.Logger
 	}
 )
 
 // NewChainClient - create a new chain client.
 func NewChainClient(
 	gasLimit uint64,
-	log *zap.SugaredLogger,
+	log *zap.Logger,
 ) *ChainClient {
 	SetPrefixes(prefix)
 	kr, err := NewKeyring()
 	if err != nil {
-		log.Fatalf("error creating keyring: %v", err)
+		log.Fatal("error creating keyring: %v", zap.Error(err))
 		return nil
 	}
 
@@ -77,13 +77,13 @@ func NewChainClient(
 func (c *ChainClient) AddAccount(name, mnemonic string, sequence, number uint64) {
 	newAcc, err := c.keyring.NewAccount(name, mnemonic, "", sdk.FullFundraiserPath, hd.Secp256k1)
 	if err != nil {
-		c.log.Fatalf("error creating account: %v", err)
+		c.log.Fatal("error creating account: %v", zap.Error(err))
 		return
 	}
 
 	addr, err := newAcc.GetAddress()
 	if err != nil {
-		c.log.Fatalf("error creating account: %v", err)
+		c.log.Fatal("error creating account: %v", zap.Error(err))
 		return
 	}
 
