@@ -62,7 +62,7 @@ func (s *ChainService) DeployContract(signerName string, fileName string, gasPri
 	}
 
 	// broadcast transaction async
-	s.log.Info("Deploying wasm contract")
+	s.log.Info("Deploying wasm contract", zap.String("fileName", fileName))
 	res, err := s.BroadCastTxAsync(txBytes)
 	if err != nil {
 		s.log.Fatal("error deploying wasm contract", zap.Error(err))

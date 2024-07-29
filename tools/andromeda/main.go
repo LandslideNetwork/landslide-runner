@@ -16,7 +16,7 @@ import (
 
 const (
 	// blockchainID is the ID of the blockchain, which is used in the RPC address
-	blockchainID = "2RtUeU61RwkYFKULcWjLWR36FKvtUdkDpFmMd24mXuKXr48Hxz"
+	blockchainID = "2cumw3prgYC3PNDeCnCyLKiprwVAJvQxbUcpCXWznCYUkwHCm5"
 
 	// rpcAddr is the address of the RPC server
 	rpcAddr = "http://127.0.0.1:9750/ext/bc/" + blockchainID + "/rpc"
@@ -114,64 +114,33 @@ func main() {
 		zap.String("code_id", rawContractCodeID),
 	)
 
-	// store vfs code
-	// upload andromeda_vfs.wasm
-	err = client.IncreaseSequence(user1)
+	msgInstBytes, err := json.Marshal(map[string]string{
+		"kernel_address": rawKernelContractAddress,
+		"owner":          acc1.Address,
+	})
 	if err != nil {
-		log.Fatal("error increasing sequence", zap.Error(err))
+		log.Fatal("error marshaling instantiate message", zap.Error(err))
 		return
 	}
 
-	txRes, err = chainService.DeployContract(user1, "./artifacts/andromeda_vfs.wasm", 5000000)
+	// andromeda_adodb.wasm
+	vfsCodeId, vfsAddr, err := uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
+		msgInstBytes,
+		"./artifacts/andromeda_vfs.wasm",
+		5000000,
+	)
 	if err != nil {
-		log.Fatal("error storing andromeda_vfs code", zap.Error(err))
-		return
-	}
-
-	rawVFSCodeID, _, err := extractResultTxDetails(txRes)
-	VFSCodeID, err := strconv.ParseUint(rawVFSCodeID, 10, 64)
-	if err != nil {
-		log.Fatal("error parsing kernel code id", zap.Error(err))
-		return
-	}
-
-	type instantiateVFS struct {
-		KernelAddress string `json:"kernel_address"`
-		Owner         string `json:"owner"`
-	}
-
-	err = client.IncreaseSequence(user1)
-	if err != nil {
-		log.Fatal("error increasing sequence", zap.Error(err))
-		return
-	}
-
-	var msgInst = instantiateVFS{
-		KernelAddress: rawKernelContractAddress,
-		Owner:         acc1.Address,
-	}
-
-	msgInstBytes, err := json.Marshal(msgInst)
-	if err != nil {
-		log.Fatal("error marshaling msgVFS", zap.Error(err))
-		return
-	}
-
-	txRes, err = chainService.InstantiateContract(user1, VFSCodeID, msgInstBytes, 2000000)
-	if err != nil {
-		log.Fatal("error instantiating wasm contract", zap.Error(err))
-		return
-	}
-
-	rawVFSContractCodeID, rawVFSContractAddress, err := extractResultTxDetails(txRes)
-	if err != nil {
-		log.Fatal("error extracting contract details", zap.Error(err))
+		log.Fatal("error uploading andromeda_vfs.wasm", zap.Error(err))
 		return
 	}
 	log.Info(
-		"committed contract info: ",
-		zap.String("contract_address", rawVFSContractAddress),
-		zap.String("code_id", rawVFSContractCodeID),
+		"committed andromeda_vfs contract info: ",
+		zap.String("contract_address", vfsAddr),
+		zap.String("code_id", vfsCodeId),
 	)
 
 	// andromeda_adodb.wasm
@@ -205,13 +174,114 @@ func main() {
 		5000000,
 	)
 	if err != nil {
-		log.Fatal("error uploading andromeda_adodb.wasm", zap.Error(err))
+		log.Fatal("error uploading andromeda_economics.wasm", zap.Error(err))
 		return
 	}
 	log.Info(
 		"committed andromeda_economics contract info: ",
-		zap.String("contract_address", adoEcoCodeId),
-		zap.String("code_id", adoEcoAddr),
+		zap.String("contract_address", adoEcoAddr),
+		zap.String("code_id", adoEcoCodeId),
+	)
+
+	// andromeda_cw721.wasm
+	msgInstCW721Bytes, err := json.Marshal(map[string]string{
+		"name":           "Example Token",
+		"symbol":         "ET",
+		"minter":         acc1.Address,
+		"kernel_address": rawKernelContractAddress,
+	})
+	if err != nil {
+		log.Fatal("error marshaling instantiate message", zap.Error(err))
+		return
+	}
+
+	cw721CodeId, cw721Addr, err := uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
+		msgInstCW721Bytes,
+		"./artifacts/andromeda_cw721.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error uploading andromeda_cw721.wasm", zap.Error(err))
+		return
+	}
+	log.Info(
+		"committed andromeda_cw721 contract info: ",
+		zap.String("contract_address", cw721Addr),
+		zap.String("code_id", cw721CodeId),
+	)
+
+	// andromeda_auction.wasm
+	auctionCodeId, auctionAddr, err := uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
+		msgInstBytes,
+		"./artifacts/andromeda_auction.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error uploading andromeda_auction.wasm", zap.Error(err))
+		return
+	}
+	log.Info(
+		"committed andromeda_auction contract info: ",
+		zap.String("contract_address", auctionAddr),
+		zap.String("code_id", auctionCodeId),
+	)
+
+	// andromeda_crowdfund.wasm
+	msgInstCrowdfundBytes, err := json.Marshal(map[string]interface{}{
+		"token_address":       cw721Addr,
+		"can_mint_after_sale": true,
+		"owner":               acc1.Address,
+		"kernel_address":      rawKernelContractAddress,
+	})
+	if err != nil {
+		log.Fatal("error marshaling instantiate message", zap.Error(err))
+		return
+	}
+	cfCodeId, cfAddr, err := uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
+		msgInstCrowdfundBytes,
+		"./artifacts/andromeda_crowdfund.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error uploading andromeda_crowdfund.wasm", zap.Error(err))
+		return
+	}
+	log.Info(
+		"committed andromeda_crowdfund contract info: ",
+		zap.String("contract_address", cfAddr),
+		zap.String("code_id", cfCodeId),
+	)
+
+	// andromeda_marketplace.wasm
+	mpCodeId, mpAddr, err := uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
+		msgInstBytes,
+		"./artifacts/andromeda_marketplace.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error uploading andromeda_marketplace.wasm", zap.Error(err))
+		return
+	}
+	log.Info(
+		"committed andromeda_marketplace contract info: ",
+		zap.String("contract_address", mpAddr),
+		zap.String("code_id", mpCodeId),
 	)
 }
 
@@ -232,14 +302,14 @@ func uploadAndInstantiate(
 
 	txRes, err := chainService.DeployContract(signer.Name, filepath, gasPrice)
 	if err != nil {
-		log.Fatal("error storing andromeda_vfs code", zap.Error(err))
+		log.Fatal("error storing code", zap.Error(err))
 		return "", "", err
 	}
 
-	rawVFSCodeID, _, err := extractResultTxDetails(txRes)
-	CodeID, err := strconv.ParseUint(rawVFSCodeID, 10, 64)
+	rawCodeID, _, err := extractResultTxDetails(txRes)
+	CodeID, err := strconv.ParseUint(rawCodeID, 10, 64)
 	if err != nil {
-		log.Fatal("error parsing kernel code id", zap.Error(err))
+		log.Fatal("error parsing code id", zap.Error(err))
 		return "", "", err
 	}
 
