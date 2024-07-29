@@ -12,14 +12,14 @@ import (
 	"go.uber.org/zap"
 )
 
-type chainService struct {
+type ChainService struct {
 	client *ChainClient
 	c      *rpchttp.HTTP
 	log    *zap.Logger
 }
 
-func NewChainService(client *ChainClient, c *rpchttp.HTTP, log *zap.Logger) *chainService {
-	return &chainService{
+func NewChainService(client *ChainClient, c *rpchttp.HTTP, log *zap.Logger) *ChainService {
+	return &ChainService{
 		client: client,
 		c:      c,
 		log:    log,
@@ -29,7 +29,7 @@ func NewChainService(client *ChainClient, c *rpchttp.HTTP, log *zap.Logger) *cha
 // DeployContract - deploy wasm contract
 //
 // upload "./artifacts/andromeda_kernel.wasm" 4000000
-func (s *chainService) DeployContract(signerName string, fileName string, gasPrice uint64) (*coretypes.ResultTx, error) {
+func (s *ChainService) DeployContract(signerName string, fileName string, gasPrice uint64) (*coretypes.ResultTx, error) {
 	WASMByteCode, err := os.ReadFile(fileName)
 	if err != nil {
 		s.log.Fatal("error reading wasm file", zap.Error(err))
@@ -82,7 +82,7 @@ func (s *chainService) DeployContract(signerName string, fileName string, gasPri
 }
 
 // InstantiateContract - instantiate wasm contract
-func (s *chainService) InstantiateContract(signerName string, codeID uint64, msg []byte, gasPrice uint64) (*coretypes.ResultTx, error) {
+func (s *ChainService) InstantiateContract(signerName string, codeID uint64, msg []byte, gasPrice uint64) (*coretypes.ResultTx, error) {
 	acc, ok := s.client.GetAccount(signerName)
 	if !ok {
 		s.log.Fatal("account not found", zap.String("signerName", signerName))

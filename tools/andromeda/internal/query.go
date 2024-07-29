@@ -10,7 +10,7 @@ import (
 )
 
 // GetBalances queries the balances of an address
-func (s *chainService) GetBalances(address string) {
+func (s *ChainService) GetBalances(address string) {
 	// Define the path for the balance query
 	queryPath := "/cosmos.bank.v1beta1.Query/AllBalances"
 

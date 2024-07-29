@@ -11,7 +11,7 @@ import (
 )
 
 // BroadCastTxAsync - broadcast transaction async
-func (s *chainService) BroadCastTxAsync(txBytes []byte) (*coretypes.ResultBroadcastTx, error) {
+func (s *ChainService) BroadCastTxAsync(txBytes []byte) (*coretypes.ResultBroadcastTx, error) {
 	res, err := s.c.BroadcastTxAsync(context.Background(), txBytes)
 	if err != nil {
 		s.log.Fatal("BroadcastTxAsync error", zap.Error(err))
@@ -27,7 +27,7 @@ func (s *chainService) BroadCastTxAsync(txBytes []byte) (*coretypes.ResultBroadc
 }
 
 // WaitTx - wait for transaction to be committed
-func (s *chainService) WaitTx(txHash []byte) (*coretypes.ResultTx, error) {
+func (s *ChainService) WaitTx(txHash []byte) (*coretypes.ResultTx, error) {
 	for i := 0; i < 30; i++ {
 		s.log.Info("Waiting for transaction to be committed")
 
@@ -51,7 +51,7 @@ func (s *chainService) WaitTx(txHash []byte) (*coretypes.ResultTx, error) {
 }
 
 // Info - get chain info
-func (s *chainService) Info() {
+func (s *ChainService) Info() {
 	res, err := s.c.NetInfo(context.Background())
 	if err != nil {
 		if strings.Contains(err.Error(), "Status: 404 Not Found") {
