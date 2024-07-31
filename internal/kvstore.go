@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	rpcclient "github.com/cometbft/cometbft/rpc/client"
+	"github.com/cometbft/cometbft/rpc/jsonrpc/client"
+	"github.com/consideritdone/landslidevm/vm"
 	"time"
 
 	"github.com/ava-labs/avalanchego/utils/logging"
@@ -13,23 +16,30 @@ import (
 
 // RunKVStoreTests runs the key value store tests
 func RunKVStoreTests(rpcAddr string, log logging.Logger) {
-	c, err := rpchttp.New(rpcAddr, "/websocket")
+	httpClient, err := rpchttp.New(rpcAddr, "/websocket")
 	if err != nil {
 		log.Fatal("error creating client", zap.Error(err)) //nolint:gocritic
 	}
+	wsClient, err := client.NewWS(rpcAddr, "/websocket")
+	if err != nil {
+		log.Fatal("error creating client", zap.Error(err)) //nolint:gocritic
+	}
+	wsc := vm.NewWSClient(wsClient)
 	<-time.After(2 * time.Second) // wait for first block to be committed
+	clients := []rpcclient.Client{httpClient, wsc}
+	for _, c := range clients {
+		CheckTX(c, log)
+		Info(c, log)
+		Query(c, log)
+		Commit(c, log)
 
-	CheckTX(c, log)
-	Info(c, log)
-	Query(c, log)
-	Commit(c, log)
-
-	GenerateTXSAsync(c, log, 200)
+		GenerateTXSAsync(c, log, 200)
+	}
 }
 
 // GenerateTXSAsync generates num transactions asynchronously
 // and waits for them to be committed
-func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int) {
+func GenerateTXSAsync(c rpcclient.Client, log logging.Logger, num int) {
 	type KV struct {
 		k []byte
 		v []byte
@@ -83,7 +93,7 @@ func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int) {
 }
 
 // ABCIQuery queries the key value store
-func ABCIQuery(c *rpchttp.HTTP, log logging.Logger, k, v []byte) error {
+func ABCIQuery(c rpcclient.Client, log logging.Logger, k, v []byte) error {
 	abcires, err := c.ABCIQuery(context.Background(), "/key", k)
 	if err != nil {
 		log.Fatal("ABCIQuery failed", zap.Error(err))
@@ -107,7 +117,7 @@ func ABCIQuery(c *rpchttp.HTTP, log logging.Logger, k, v []byte) error {
 	return nil
 }
 
-func CheckTX(c *rpchttp.HTTP, log logging.Logger) {
+func CheckTX(c rpcclient.Client, log logging.Logger) {
 	// Create a transaction
 	k := []byte("name")
 	v := []byte("satoshi")
@@ -127,7 +137,7 @@ func CheckTX(c *rpchttp.HTTP, log logging.Logger) {
 	log.Info("CheckTx transaction success")
 }
 
-func Info(c *rpchttp.HTTP, log logging.Logger) {
+func Info(c rpcclient.Client, log logging.Logger) {
 	res, err := c.NetInfo(context.Background())
 	if err != nil {
 		log.Fatal("error NetInfo", zap.Error(err))
@@ -162,7 +172,7 @@ func Info(c *rpchttp.HTTP, log logging.Logger) {
 // and then commits the next block
 // It also checks the apphash and the last commit hash
 // of the new block
-func Commit(c *rpchttp.HTTP, log logging.Logger) {
+func Commit(c rpcclient.Client, log logging.Logger) {
 	// get the current status
 	s, err := c.Status(context.Background())
 	if err != nil {
@@ -228,7 +238,7 @@ func Commit(c *rpchttp.HTTP, log logging.Logger) {
 	log.Info("Commit success")
 }
 
-func Query(c *rpchttp.HTTP, log logging.Logger) {
+func Query(c rpcclient.Client, log logging.Logger) {
 	log.Info("Querying the key value store")
 	// Create a transaction
 	k, v, tx := MakeTxKV()
