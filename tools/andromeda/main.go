@@ -16,7 +16,7 @@ import (
 
 const (
 	// blockchainID is the ID of the blockchain, which is used in the RPC address
-	blockchainID = "2cumw3prgYC3PNDeCnCyLKiprwVAJvQxbUcpCXWznCYUkwHCm5"
+	blockchainID = "24rqx6G432q33gwdXh2U95BFTcfBnrjuVmQ7NMN8BFrpyx6Ais"
 
 	// rpcAddr is the address of the RPC server
 	rpcAddr = "http://127.0.0.1:9750/ext/bc/" + blockchainID + "/rpc"
@@ -282,6 +282,101 @@ func main() {
 		"committed andromeda_marketplace contract info: ",
 		zap.String("contract_address", mpAddr),
 		zap.String("code_id", mpCodeId),
+	)
+
+	// andromeda_cw20.wasm
+	msgInstCw20Bytes, err := json.Marshal(map[string]interface{}{
+		"name":     "CW20 Token",
+		"symbol":   "Test-CW", // only letters A-z, "-", 3-20 characters
+		"decimals": 6,
+		"initial_balances": []map[string]interface{}{
+			{
+				"address": acc1.Address,
+				"amount":  "10000000000",
+			},
+		},
+		"owner":          acc1.Address,
+		"kernel_address": rawKernelContractAddress,
+	})
+	if err != nil {
+		log.Fatal("error marshaling instantiate message", zap.Error(err))
+		return
+	}
+	cw20CodeId, cw20Addr, err := uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
+		msgInstCw20Bytes,
+		"./artifacts/andromeda_cw20.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error uploading andromeda_cw20.wasm", zap.Error(err))
+		return
+	}
+	log.Info(
+		"committed andromeda_cw20.wasm contract info: ",
+		zap.String("contract_address", cw20Addr),
+		zap.String("code_id", cw20CodeId),
+	)
+
+	// andromeda_cw20_exchange.wasm
+	msgInstCw20ExchBytes, err := json.Marshal(map[string]interface{}{
+		"token_address":  cw20Addr,
+		"owner":          acc1.Address,
+		"kernel_address": rawKernelContractAddress,
+	})
+	if err != nil {
+		log.Fatal("error marshaling instantiate message", zap.Error(err))
+		return
+	}
+	cw20ExchCodeId, cw20ExchAddr, err := uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
+		msgInstCw20ExchBytes,
+		"./artifacts/andromeda_cw20_exchange.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error uploading andromeda_cw20_exchange.wasm", zap.Error(err))
+		return
+	}
+	log.Info(
+		"committed andromeda_cw20_exchange.wasm contract info: ",
+		zap.String("contract_address", cw20ExchAddr),
+		zap.String("code_id", cw20ExchCodeId),
+	)
+
+	// andromeda_cw20_staking.wasm
+	msgInstCw20StakingBytes, err := json.Marshal(map[string]interface{}{
+		"staking_token":  cw20Addr,
+		"owner":          acc1.Address,
+		"kernel_address": rawKernelContractAddress,
+	})
+	if err != nil {
+		log.Fatal("error marshaling instantiate message", zap.Error(err))
+		return
+	}
+	cw20StakingCodeId, cw20StakingAddr, err := uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
+		msgInstCw20StakingBytes,
+		"./artifacts/andromeda_cw20_staking.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error uploading andromeda_cw20_staking.wasm", zap.Error(err))
+		return
+	}
+	log.Info(
+		"committed andromeda_cw20_staking.wasm contract info: ",
+		zap.String("contract_address", cw20StakingAddr),
+		zap.String("code_id", cw20StakingCodeId),
 	)
 }
 
