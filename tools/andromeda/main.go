@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
@@ -16,7 +17,7 @@ import (
 
 const (
 	// blockchainID is the ID of the blockchain, which is used in the RPC address
-	blockchainID = "2GKYCmxNpf8KdvbzMZD7n61LnTpcN1rYj1jxZMa6vbkPgSAkY2"
+	blockchainID = "J4aUqz5tD6VfnAeKvEjTTRiLBSgwxga5i6sYNQy1tmy12Uje6"
 
 	// rpcAddr is the address of the RPC server
 	rpcAddr = "http://127.0.0.1:9750/ext/bc/" + blockchainID + "/rpc"
@@ -96,8 +97,20 @@ func main() {
 		return
 	}
 
-	msg := []byte(fmt.Sprintf(`{"chain_name": "%s", "owner": "%s"}`, internal.ChainID, acc1.Address))
-	txRes, err = chainService.InstantiateContract(user1, kernelCodeId, msg, 2000000)
+	msgInstKernelBytes, err := json.Marshal(map[string]interface{}{
+		"chain_name": internal.ChainID,
+		"owner":      acc1.Address,
+	})
+	if err != nil {
+		log.Fatal("error marshaling instantiate message", zap.Error(err))
+		return
+	}
+	txRes, err = chainService.InstantiateContract(
+		user1,
+		kernelCodeId,
+		msgInstKernelBytes,
+		2000000,
+	)
 	if err != nil {
 		log.Fatal("error instantiating wasm contract", zap.Error(err))
 		return
@@ -408,6 +421,39 @@ func main() {
 		"committed andromeda_merkle_airdrop.wasm contract info: ",
 		zap.String("contract_address", airdropCodeId),
 		zap.String("code_id", airdropAddr),
+	)
+
+	// andromeda_lockdrop.wasm
+	msgInstLockdropBytes, err := json.Marshal(map[string]interface{}{
+		"init_timestamp":    time.Now().Add(time.Hour * 24 * 7).UnixMilli(),
+		"deposit_window":    (time.Hour * 24 * 7).Milliseconds(),
+		"withdrawal_window": (time.Hour * 24 * 5).Milliseconds(), // should be less than deposit_window
+		"incentive_token":   cw20Addr,
+		"native_denom":      "stake",
+		"owner":             acc1.Address,
+		"kernel_address":    rawKernelContractAddress,
+	})
+	if err != nil {
+		log.Fatal("error marshaling instantiate message", zap.Error(err))
+		return
+	}
+	lockdropCodeId, lockdropAddr, err := uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
+		msgInstLockdropBytes,
+		"./artifacts/andromeda_lockdrop.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error uploading andromeda_lockdrop.wasm", zap.Error(err))
+		return
+	}
+	log.Info(
+		"committed andromeda_lockdrop.wasm contract info: ",
+		zap.String("contract_address", lockdropCodeId),
+		zap.String("code_id", lockdropAddr),
 	)
 }
 
