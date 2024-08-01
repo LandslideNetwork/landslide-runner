@@ -16,7 +16,7 @@ import (
 
 const (
 	// blockchainID is the ID of the blockchain, which is used in the RPC address
-	blockchainID = "24rqx6G432q33gwdXh2U95BFTcfBnrjuVmQ7NMN8BFrpyx6Ais"
+	blockchainID = "2GKYCmxNpf8KdvbzMZD7n61LnTpcN1rYj1jxZMa6vbkPgSAkY2"
 
 	// rpcAddr is the address of the RPC server
 	rpcAddr = "http://127.0.0.1:9750/ext/bc/" + blockchainID + "/rpc"
@@ -377,6 +377,37 @@ func main() {
 		"committed andromeda_cw20_staking.wasm contract info: ",
 		zap.String("contract_address", cw20StakingAddr),
 		zap.String("code_id", cw20StakingCodeId),
+	)
+
+	// andromeda_merkle_airdrop.wasm
+	msgInstAirdropBytes, err := json.Marshal(map[string]interface{}{
+		"asset_info": map[string]interface{}{
+			"native": "stake", // "cw20": "cw20_address"
+		},
+		"owner":          acc1.Address,
+		"kernel_address": rawKernelContractAddress,
+	})
+	if err != nil {
+		log.Fatal("error marshaling instantiate message", zap.Error(err))
+		return
+	}
+	airdropCodeId, airdropAddr, err := uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
+		msgInstAirdropBytes,
+		"./artifacts/andromeda_merkle_airdrop.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error uploading andromeda_merkle_airdrop.wasm", zap.Error(err))
+		return
+	}
+	log.Info(
+		"committed andromeda_merkle_airdrop.wasm contract info: ",
+		zap.String("contract_address", airdropCodeId),
+		zap.String("code_id", airdropAddr),
 	)
 }
 
