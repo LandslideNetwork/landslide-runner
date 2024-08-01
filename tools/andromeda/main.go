@@ -17,7 +17,7 @@ import (
 
 const (
 	// blockchainID is the ID of the blockchain, which is used in the RPC address
-	blockchainID = "J4aUqz5tD6VfnAeKvEjTTRiLBSgwxga5i6sYNQy1tmy12Uje6"
+	blockchainID = "2dXNf9u5s8LXHywq4YLTpbZYywbTHTvG8K7ZZ9sB9gjzRoiM7D"
 
 	// rpcAddr is the address of the RPC server
 	rpcAddr = "http://127.0.0.1:9750/ext/bc/" + blockchainID + "/rpc"
@@ -26,6 +26,8 @@ const (
 	user1 = "user1"
 	user2 = "user2"
 )
+
+var isFirstDeploy = true
 
 func main() {
 	// Configure zap logger
@@ -76,27 +78,7 @@ func main() {
 	chainService.GetBalances(acc1.Address)
 	chainService.GetBalances(acc2.Address)
 
-	// store kernel code
 	// upload andromeda_kernel.wasm
-	txRes, err := chainService.DeployContract(user1, "./artifacts/andromeda_kernel.wasm", 4000000)
-	if err != nil {
-		log.Fatal("error storing kernel code", zap.Error(err))
-		return
-	}
-
-	rawKernelCodeID, _, err := extractResultTxDetails(txRes)
-	kernelCodeId, err := strconv.ParseUint(rawKernelCodeID, 10, 64)
-	if err != nil {
-		log.Fatal("error parsing kernel code id", zap.Error(err))
-		return
-	}
-
-	err = client.IncreaseSequence(user1)
-	if err != nil {
-		log.Fatal("error increasing sequence", zap.Error(err))
-		return
-	}
-
 	msgInstKernelBytes, err := json.Marshal(map[string]interface{}{
 		"chain_name": internal.ChainID,
 		"owner":      acc1.Address,
@@ -105,28 +87,22 @@ func main() {
 		log.Fatal("error marshaling instantiate message", zap.Error(err))
 		return
 	}
-	txRes, err = chainService.InstantiateContract(
-		user1,
-		kernelCodeId,
+
+	_, rawKernelContractAddress, err := uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
 		msgInstKernelBytes,
-		2000000,
+		"./artifacts/andromeda_kernel.wasm",
+		4000000,
 	)
 	if err != nil {
-		log.Fatal("error instantiating wasm contract", zap.Error(err))
+		log.Fatal("error uploading andromeda_vfs.wasm", zap.Error(err))
 		return
 	}
 
-	rawContractCodeID, rawKernelContractAddress, err := extractResultTxDetails(txRes)
-	if err != nil {
-		log.Fatal("error extracting contract details", zap.Error(err))
-		return
-	}
-	log.Info(
-		"committed contract info: ",
-		zap.String("contract_address", rawKernelContractAddress),
-		zap.String("code_id", rawContractCodeID),
-	)
-
+	// andromeda_adodb.wasm
 	msgInstBytes, err := json.Marshal(map[string]string{
 		"kernel_address": rawKernelContractAddress,
 		"owner":          acc1.Address,
@@ -136,8 +112,7 @@ func main() {
 		return
 	}
 
-	// andromeda_adodb.wasm
-	vfsCodeId, vfsAddr, err := uploadAndInstantiate(
+	_, _, err = uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -150,14 +125,9 @@ func main() {
 		log.Fatal("error uploading andromeda_vfs.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_vfs contract info: ",
-		zap.String("contract_address", vfsAddr),
-		zap.String("code_id", vfsCodeId),
-	)
 
 	// andromeda_adodb.wasm
-	adodbCodeId, adodbAddr, err := uploadAndInstantiate(
+	_, _, err = uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -170,14 +140,9 @@ func main() {
 		log.Fatal("error uploading andromeda_adodb.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_adodb contract info: ",
-		zap.String("contract_address", adodbAddr),
-		zap.String("code_id", adodbCodeId),
-	)
 
 	// andromeda_economics.wasm
-	adoEcoCodeId, adoEcoAddr, err := uploadAndInstantiate(
+	_, _, err = uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -190,11 +155,6 @@ func main() {
 		log.Fatal("error uploading andromeda_economics.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_economics contract info: ",
-		zap.String("contract_address", adoEcoAddr),
-		zap.String("code_id", adoEcoCodeId),
-	)
 
 	// andromeda_cw721.wasm
 	msgInstCW721Bytes, err := json.Marshal(map[string]string{
@@ -208,7 +168,7 @@ func main() {
 		return
 	}
 
-	cw721CodeId, cw721Addr, err := uploadAndInstantiate(
+	_, cw721Addr, err := uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -221,14 +181,9 @@ func main() {
 		log.Fatal("error uploading andromeda_cw721.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_cw721 contract info: ",
-		zap.String("contract_address", cw721Addr),
-		zap.String("code_id", cw721CodeId),
-	)
 
 	// andromeda_auction.wasm
-	auctionCodeId, auctionAddr, err := uploadAndInstantiate(
+	_, _, err = uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -241,11 +196,6 @@ func main() {
 		log.Fatal("error uploading andromeda_auction.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_auction contract info: ",
-		zap.String("contract_address", auctionAddr),
-		zap.String("code_id", auctionCodeId),
-	)
 
 	// andromeda_crowdfund.wasm
 	msgInstCrowdfundBytes, err := json.Marshal(map[string]interface{}{
@@ -258,7 +208,7 @@ func main() {
 		log.Fatal("error marshaling instantiate message", zap.Error(err))
 		return
 	}
-	cfCodeId, cfAddr, err := uploadAndInstantiate(
+	_, _, err = uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -271,14 +221,9 @@ func main() {
 		log.Fatal("error uploading andromeda_crowdfund.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_crowdfund contract info: ",
-		zap.String("contract_address", cfAddr),
-		zap.String("code_id", cfCodeId),
-	)
 
 	// andromeda_marketplace.wasm
-	mpCodeId, mpAddr, err := uploadAndInstantiate(
+	_, _, err = uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -291,11 +236,6 @@ func main() {
 		log.Fatal("error uploading andromeda_marketplace.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_marketplace contract info: ",
-		zap.String("contract_address", mpAddr),
-		zap.String("code_id", mpCodeId),
-	)
 
 	// andromeda_cw20.wasm
 	msgInstCw20Bytes, err := json.Marshal(map[string]interface{}{
@@ -315,7 +255,7 @@ func main() {
 		log.Fatal("error marshaling instantiate message", zap.Error(err))
 		return
 	}
-	cw20CodeId, cw20Addr, err := uploadAndInstantiate(
+	_, cw20Addr, err := uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -328,11 +268,6 @@ func main() {
 		log.Fatal("error uploading andromeda_cw20.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_cw20.wasm contract info: ",
-		zap.String("contract_address", cw20Addr),
-		zap.String("code_id", cw20CodeId),
-	)
 
 	// andromeda_cw20_exchange.wasm
 	msgInstCw20ExchBytes, err := json.Marshal(map[string]interface{}{
@@ -344,7 +279,7 @@ func main() {
 		log.Fatal("error marshaling instantiate message", zap.Error(err))
 		return
 	}
-	cw20ExchCodeId, cw20ExchAddr, err := uploadAndInstantiate(
+	_, _, err = uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -357,11 +292,6 @@ func main() {
 		log.Fatal("error uploading andromeda_cw20_exchange.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_cw20_exchange.wasm contract info: ",
-		zap.String("contract_address", cw20ExchAddr),
-		zap.String("code_id", cw20ExchCodeId),
-	)
 
 	// andromeda_cw20_staking.wasm
 	msgInstCw20StakingBytes, err := json.Marshal(map[string]interface{}{
@@ -373,7 +303,7 @@ func main() {
 		log.Fatal("error marshaling instantiate message", zap.Error(err))
 		return
 	}
-	cw20StakingCodeId, cw20StakingAddr, err := uploadAndInstantiate(
+	_, _, err = uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -386,11 +316,6 @@ func main() {
 		log.Fatal("error uploading andromeda_cw20_staking.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_cw20_staking.wasm contract info: ",
-		zap.String("contract_address", cw20StakingAddr),
-		zap.String("code_id", cw20StakingCodeId),
-	)
 
 	// andromeda_merkle_airdrop.wasm
 	msgInstAirdropBytes, err := json.Marshal(map[string]interface{}{
@@ -404,7 +329,7 @@ func main() {
 		log.Fatal("error marshaling instantiate message", zap.Error(err))
 		return
 	}
-	airdropCodeId, airdropAddr, err := uploadAndInstantiate(
+	_, _, err = uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -417,11 +342,6 @@ func main() {
 		log.Fatal("error uploading andromeda_merkle_airdrop.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_merkle_airdrop.wasm contract info: ",
-		zap.String("contract_address", airdropCodeId),
-		zap.String("code_id", airdropAddr),
-	)
 
 	// andromeda_lockdrop.wasm
 	msgInstLockdropBytes, err := json.Marshal(map[string]interface{}{
@@ -437,7 +357,7 @@ func main() {
 		log.Fatal("error marshaling instantiate message", zap.Error(err))
 		return
 	}
-	lockdropCodeId, lockdropAddr, err := uploadAndInstantiate(
+	_, _, err = uploadAndInstantiate(
 		chainService,
 		client,
 		log,
@@ -450,11 +370,7 @@ func main() {
 		log.Fatal("error uploading andromeda_lockdrop.wasm", zap.Error(err))
 		return
 	}
-	log.Info(
-		"committed andromeda_lockdrop.wasm contract info: ",
-		zap.String("contract_address", lockdropCodeId),
-		zap.String("code_id", lockdropAddr),
-	)
+
 }
 
 func uploadAndInstantiate(
@@ -466,11 +382,14 @@ func uploadAndInstantiate(
 	filepath string,
 	gasPrice uint64,
 ) (string, string, error) {
-	err := client.IncreaseSequence(signer.Name)
-	if err != nil {
-		log.Fatal("error increasing sequence", zap.Error(err))
-		return "", "", err
+	if !isFirstDeploy {
+		err := client.IncreaseSequence(signer.Name)
+		if err != nil {
+			log.Fatal("error increasing sequence", zap.Error(err))
+			return "", "", err
+		}
 	}
+	isFirstDeploy = false
 
 	txRes, err := chainService.DeployContract(signer.Name, filepath, gasPrice)
 	if err != nil {
@@ -503,9 +422,9 @@ func uploadAndInstantiate(
 		return "", "", err
 	}
 	log.Info(
-		"committed contract info: ",
-		zap.String("contract_address", rawContractAddress),
-		zap.String("code_id", rawContractCodeID),
+		fmt.Sprintf("committed %s contract info: ", filepath),
+		zap.String(fmt.Sprintf("%s contract_address", filepath), rawContractAddress),
+		zap.String(fmt.Sprintf("%s code_id", filepath), rawContractCodeID),
 	)
 
 	return rawContractCodeID, rawContractAddress, nil
