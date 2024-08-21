@@ -85,4 +85,11 @@ func (s *ChainService) Info() {
 	}
 
 	s.log.Info("BlockchainInfo success: ", zap.Any("resBc", resBc))
+
+	resStatus, err := s.c.Status(context.Background())
+	if err != nil {
+		s.log.Fatal("get status error", zap.Error(err))
+		return
+	}
+	s.log.Info("Status success: ", zap.Any("resStatus", resStatus))
 }

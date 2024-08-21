@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
-	"time"
 
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
@@ -17,10 +17,7 @@ import (
 
 const (
 	// blockchainID is the ID of the blockchain, which is used in the RPC address
-	blockchainID = "2dXNf9u5s8LXHywq4YLTpbZYywbTHTvG8K7ZZ9sB9gjzRoiM7D"
-
-	// rpcAddr is the address of the RPC server
-	rpcAddr = "http://127.0.0.1:9750/ext/bc/" + blockchainID + "/rpc"
+	blockchainID = "mnTRdJ9SnuxH39hv4w1yE5qwsVFrA3pPw7Sa28vsPxR5ZvoPX"
 
 	// user1 and user2 are the names of the accounts
 	user1 = "user1"
@@ -30,6 +27,15 @@ const (
 var isFirstDeploy = true
 
 func main() {
+	bcID := blockchainID
+	if len(os.Args) > 1 {
+		bcID = os.Args[1]
+	}
+	fmt.Println("BcID:", bcID)
+
+	// rpcAddr is the address of the RPC server
+	rpcAddr := "http://127.0.0.1:9750/ext/bc/" + bcID + "/rpc"
+
 	// Configure zap logger
 	config := zap.NewProductionConfig()
 	config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("")
@@ -140,113 +146,117 @@ func main() {
 		log.Fatal("error uploading andromeda_adodb.wasm", zap.Error(err))
 		return
 	}
-
-	// andromeda_economics.wasm
-	_, _, err = uploadAndInstantiate(
-		chainService,
-		client,
-		log,
-		acc1,
-		msgInstBytes,
-		"./artifacts/andromeda_economics.wasm",
-		5000000,
-	)
-	if err != nil {
-		log.Fatal("error uploading andromeda_economics.wasm", zap.Error(err))
-		return
-	}
-
-	// andromeda_cw721.wasm
-	msgInstCW721Bytes, err := json.Marshal(map[string]string{
-		"name":           "Example Token",
-		"symbol":         "ET",
-		"minter":         acc1.Address,
-		"kernel_address": rawKernelContractAddress,
-	})
-	if err != nil {
-		log.Fatal("error marshaling instantiate message", zap.Error(err))
-		return
-	}
-
-	_, cw721Addr, err := uploadAndInstantiate(
-		chainService,
-		client,
-		log,
-		acc1,
-		msgInstCW721Bytes,
-		"./artifacts/andromeda_cw721.wasm",
-		5000000,
-	)
-	if err != nil {
-		log.Fatal("error uploading andromeda_cw721.wasm", zap.Error(err))
-		return
-	}
-
-	// andromeda_auction.wasm
-	_, _, err = uploadAndInstantiate(
-		chainService,
-		client,
-		log,
-		acc1,
-		msgInstBytes,
-		"./artifacts/andromeda_auction.wasm",
-		5000000,
-	)
-	if err != nil {
-		log.Fatal("error uploading andromeda_auction.wasm", zap.Error(err))
-		return
-	}
-
-	// andromeda_crowdfund.wasm
-	msgInstCrowdfundBytes, err := json.Marshal(map[string]interface{}{
-		"token_address":       cw721Addr,
-		"can_mint_after_sale": true,
-		"owner":               acc1.Address,
-		"kernel_address":      rawKernelContractAddress,
-	})
-	if err != nil {
-		log.Fatal("error marshaling instantiate message", zap.Error(err))
-		return
-	}
-	_, _, err = uploadAndInstantiate(
-		chainService,
-		client,
-		log,
-		acc1,
-		msgInstCrowdfundBytes,
-		"./artifacts/andromeda_crowdfund.wasm",
-		5000000,
-	)
-	if err != nil {
-		log.Fatal("error uploading andromeda_crowdfund.wasm", zap.Error(err))
-		return
-	}
-
-	// andromeda_marketplace.wasm
-	_, _, err = uploadAndInstantiate(
-		chainService,
-		client,
-		log,
-		acc1,
-		msgInstBytes,
-		"./artifacts/andromeda_marketplace.wasm",
-		5000000,
-	)
-	if err != nil {
-		log.Fatal("error uploading andromeda_marketplace.wasm", zap.Error(err))
-		return
-	}
-
+	//
+	// // andromeda_economics.wasm
+	// _, _, err = uploadAndInstantiate(
+	// 	chainService,
+	// 	client,
+	// 	log,
+	// 	acc1,
+	// 	msgInstBytes,
+	// 	"./artifacts/andromeda_economics.wasm",
+	// 	5000000,
+	// )
+	// if err != nil {
+	// 	log.Fatal("error uploading andromeda_economics.wasm", zap.Error(err))
+	// 	return
+	// }
+	//
+	// // andromeda_cw721.wasm
+	// msgInstCW721Bytes, err := json.Marshal(map[string]string{
+	// 	"name":           "Example Token",
+	// 	"symbol":         "ET",
+	// 	"minter":         acc1.Address,
+	// 	"kernel_address": rawKernelContractAddress,
+	// })
+	// if err != nil {
+	// 	log.Fatal("error marshaling instantiate message", zap.Error(err))
+	// 	return
+	// }
+	//
+	// _, cw721Addr, err := uploadAndInstantiate(
+	// 	chainService,
+	// 	client,
+	// 	log,
+	// 	acc1,
+	// 	msgInstCW721Bytes,
+	// 	"./artifacts/andromeda_cw721.wasm",
+	// 	5000000,
+	// )
+	// if err != nil {
+	// 	log.Fatal("error uploading andromeda_cw721.wasm", zap.Error(err))
+	// 	return
+	// }
+	//
+	// // andromeda_auction.wasm
+	// _, _, err = uploadAndInstantiate(
+	// 	chainService,
+	// 	client,
+	// 	log,
+	// 	acc1,
+	// 	msgInstBytes,
+	// 	"./artifacts/andromeda_auction.wasm",
+	// 	5000000,
+	// )
+	// if err != nil {
+	// 	log.Fatal("error uploading andromeda_auction.wasm", zap.Error(err))
+	// 	return
+	// }
+	//
+	// // andromeda_crowdfund.wasm
+	// msgInstCrowdfundBytes, err := json.Marshal(map[string]interface{}{
+	// 	"token_address":       cw721Addr,
+	// 	"can_mint_after_sale": true,
+	// 	"owner":               acc1.Address,
+	// 	"kernel_address":      rawKernelContractAddress,
+	// })
+	// if err != nil {
+	// 	log.Fatal("error marshaling instantiate message", zap.Error(err))
+	// 	return
+	// }
+	// _, _, err = uploadAndInstantiate(
+	// 	chainService,
+	// 	client,
+	// 	log,
+	// 	acc1,
+	// 	msgInstCrowdfundBytes,
+	// 	"./artifacts/andromeda_crowdfund.wasm",
+	// 	5000000,
+	// )
+	// if err != nil {
+	// 	log.Fatal("error uploading andromeda_crowdfund.wasm", zap.Error(err))
+	// 	return
+	// }
+	//
+	// // andromeda_marketplace.wasm
+	// _, _, err = uploadAndInstantiate(
+	// 	chainService,
+	// 	client,
+	// 	log,
+	// 	acc1,
+	// 	msgInstBytes,
+	// 	"./artifacts/andromeda_marketplace.wasm",
+	// 	5000000,
+	// )
+	// if err != nil {
+	// 	log.Fatal("error uploading andromeda_marketplace.wasm", zap.Error(err))
+	// 	return
+	// }
+	//
 	// andromeda_cw20.wasm
 	msgInstCw20Bytes, err := json.Marshal(map[string]interface{}{
 		"name":     "CW20 Token",
-		"symbol":   "Test-CW", // only letters A-z, "-", 3-20 characters
+		"symbol":   "LND", // only letters A-z, "-", 3-20 characters
 		"decimals": 6,
 		"initial_balances": []map[string]interface{}{
 			{
 				"address": acc1.Address,
 				"amount":  "10000000000",
 			},
+		},
+		"mint": map[string]interface{}{
+			"minter": acc1.Address,
+			"cap":    "1000000000000000000",
 		},
 		"owner":          acc1.Address,
 		"kernel_address": rawKernelContractAddress,
@@ -293,83 +303,83 @@ func main() {
 		return
 	}
 
-	// andromeda_cw20_staking.wasm
-	msgInstCw20StakingBytes, err := json.Marshal(map[string]interface{}{
-		"staking_token":  cw20Addr,
-		"owner":          acc1.Address,
-		"kernel_address": rawKernelContractAddress,
-	})
-	if err != nil {
-		log.Fatal("error marshaling instantiate message", zap.Error(err))
-		return
-	}
-	_, _, err = uploadAndInstantiate(
-		chainService,
-		client,
-		log,
-		acc1,
-		msgInstCw20StakingBytes,
-		"./artifacts/andromeda_cw20_staking.wasm",
-		5000000,
-	)
-	if err != nil {
-		log.Fatal("error uploading andromeda_cw20_staking.wasm", zap.Error(err))
-		return
-	}
-
-	// andromeda_merkle_airdrop.wasm
-	msgInstAirdropBytes, err := json.Marshal(map[string]interface{}{
-		"asset_info": map[string]interface{}{
-			"native": "stake", // "cw20": "cw20_address"
-		},
-		"owner":          acc1.Address,
-		"kernel_address": rawKernelContractAddress,
-	})
-	if err != nil {
-		log.Fatal("error marshaling instantiate message", zap.Error(err))
-		return
-	}
-	_, _, err = uploadAndInstantiate(
-		chainService,
-		client,
-		log,
-		acc1,
-		msgInstAirdropBytes,
-		"./artifacts/andromeda_merkle_airdrop.wasm",
-		5000000,
-	)
-	if err != nil {
-		log.Fatal("error uploading andromeda_merkle_airdrop.wasm", zap.Error(err))
-		return
-	}
-
-	// andromeda_lockdrop.wasm
-	msgInstLockdropBytes, err := json.Marshal(map[string]interface{}{
-		"init_timestamp":    time.Now().Add(time.Hour * 24 * 7).UnixMilli(),
-		"deposit_window":    (time.Hour * 24 * 7).Milliseconds(),
-		"withdrawal_window": (time.Hour * 24 * 5).Milliseconds(), // should be less than deposit_window
-		"incentive_token":   cw20Addr,
-		"native_denom":      "stake",
-		"owner":             acc1.Address,
-		"kernel_address":    rawKernelContractAddress,
-	})
-	if err != nil {
-		log.Fatal("error marshaling instantiate message", zap.Error(err))
-		return
-	}
-	_, _, err = uploadAndInstantiate(
-		chainService,
-		client,
-		log,
-		acc1,
-		msgInstLockdropBytes,
-		"./artifacts/andromeda_lockdrop.wasm",
-		5000000,
-	)
-	if err != nil {
-		log.Fatal("error uploading andromeda_lockdrop.wasm", zap.Error(err))
-		return
-	}
+	// // andromeda_cw20_staking.wasm
+	// msgInstCw20StakingBytes, err := json.Marshal(map[string]interface{}{
+	// 	"staking_token":  cw20Addr,
+	// 	"owner":          acc1.Address,
+	// 	"kernel_address": rawKernelContractAddress,
+	// })
+	// if err != nil {
+	// 	log.Fatal("error marshaling instantiate message", zap.Error(err))
+	// 	return
+	// }
+	// _, _, err = uploadAndInstantiate(
+	// 	chainService,
+	// 	client,
+	// 	log,
+	// 	acc1,
+	// 	msgInstCw20StakingBytes,
+	// 	"./artifacts/andromeda_cw20_staking.wasm",
+	// 	5000000,
+	// )
+	// if err != nil {
+	// 	log.Fatal("error uploading andromeda_cw20_staking.wasm", zap.Error(err))
+	// 	return
+	// }
+	//
+	// // andromeda_merkle_airdrop.wasm
+	// msgInstAirdropBytes, err := json.Marshal(map[string]interface{}{
+	// 	"asset_info": map[string]interface{}{
+	// 		"native": "stake", // "cw20": "cw20_address"
+	// 	},
+	// 	"owner":          acc1.Address,
+	// 	"kernel_address": rawKernelContractAddress,
+	// })
+	// if err != nil {
+	// 	log.Fatal("error marshaling instantiate message", zap.Error(err))
+	// 	return
+	// }
+	// _, _, err = uploadAndInstantiate(
+	// 	chainService,
+	// 	client,
+	// 	log,
+	// 	acc1,
+	// 	msgInstAirdropBytes,
+	// 	"./artifacts/andromeda_merkle_airdrop.wasm",
+	// 	5000000,
+	// )
+	// if err != nil {
+	// 	log.Fatal("error uploading andromeda_merkle_airdrop.wasm", zap.Error(err))
+	// 	return
+	// }
+	//
+	// // andromeda_lockdrop.wasm
+	// msgInstLockdropBytes, err := json.Marshal(map[string]interface{}{
+	// 	"init_timestamp":    time.Now().Add(time.Hour * 24 * 7).UnixMilli(),
+	// 	"deposit_window":    (time.Hour * 24 * 7).Milliseconds(),
+	// 	"withdrawal_window": (time.Hour * 24 * 5).Milliseconds(), // should be less than deposit_window
+	// 	"incentive_token":   cw20Addr,
+	// 	"native_denom":      "stake",
+	// 	"owner":             acc1.Address,
+	// 	"kernel_address":    rawKernelContractAddress,
+	// })
+	// if err != nil {
+	// 	log.Fatal("error marshaling instantiate message", zap.Error(err))
+	// 	return
+	// }
+	// _, _, err = uploadAndInstantiate(
+	// 	chainService,
+	// 	client,
+	// 	log,
+	// 	acc1,
+	// 	msgInstLockdropBytes,
+	// 	"./artifacts/andromeda_lockdrop.wasm",
+	// 	5000000,
+	// )
+	// if err != nil {
+	// 	log.Fatal("error uploading andromeda_lockdrop.wasm", zap.Error(err))
+	// 	return
+	// }
 
 }
 
