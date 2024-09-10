@@ -17,7 +17,7 @@ import (
 
 const (
 	// blockchainID is the ID of the blockchain, which is used in the RPC address
-	blockchainID = "mnTRdJ9SnuxH39hv4w1yE5qwsVFrA3pPw7Sa28vsPxR5ZvoPX"
+	blockchainID = "YUesRAZrd7bcrnbVgCNbYhgpLz49WhD8vV9iEbAYgu2H9rDvG"
 
 	// user1 and user2 are the names of the accounts
 	user1 = "user1"
@@ -118,6 +118,21 @@ func main() {
 		return
 	}
 
+	// andromeda_economics.wasm
+	_, _, err = uploadAndInstantiate(
+		chainService,
+		client,
+		log,
+		acc1,
+		msgInstBytes,
+		"./artifacts/andromeda_economics.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error uploading andromeda_economics.wasm", zap.Error(err))
+		return
+	}
+
 	_, _, err = uploadAndInstantiate(
 		chainService,
 		client,
@@ -146,22 +161,7 @@ func main() {
 		log.Fatal("error uploading andromeda_adodb.wasm", zap.Error(err))
 		return
 	}
-	//
-	// // andromeda_economics.wasm
-	// _, _, err = uploadAndInstantiate(
-	// 	chainService,
-	// 	client,
-	// 	log,
-	// 	acc1,
-	// 	msgInstBytes,
-	// 	"./artifacts/andromeda_economics.wasm",
-	// 	5000000,
-	// )
-	// if err != nil {
-	// 	log.Fatal("error uploading andromeda_economics.wasm", zap.Error(err))
-	// 	return
-	// }
-	//
+
 	// // andromeda_cw721.wasm
 	// msgInstCW721Bytes, err := json.Marshal(map[string]string{
 	// 	"name":           "Example Token",
