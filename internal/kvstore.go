@@ -3,13 +3,22 @@ package internal
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"github.com/ava-labs/avalanchego/ids"
+	"github.com/cometbft/cometbft/rpc/jsonrpc/types"
+	"io"
+	"math/rand"
+	"net/http"
 	"time"
 
 	"github.com/ava-labs/avalanchego/utils/logging"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
+	jsonrpcclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 	"go.uber.org/zap"
 )
+
+var httpClient = http.DefaultClient
 
 // RunKVStoreTests runs the key value store tests
 func RunKVStoreTests(rpcAddr string, log logging.Logger) {
@@ -17,12 +26,14 @@ func RunKVStoreTests(rpcAddr string, log logging.Logger) {
 	if err != nil {
 		log.Fatal("error creating client", zap.Error(err)) //nolint:gocritic
 	}
+	rpcClient, err := jsonrpcclient.DefaultHTTPClient(rpcAddr)
 	<-time.After(2 * time.Second) // wait for first block to be committed
 
 	CheckTX(c, log)
 	Info(c, log)
 	Query(c, log)
 	Commit(c, log)
+	WasmGetSignature(c, rpcClient, log)
 
 	GenerateTXSAsync(c, log, 200)
 }
@@ -226,6 +237,62 @@ func Commit(c *rpchttp.HTTP, log logging.Logger) {
 	}
 
 	log.Info("Commit success")
+}
+
+func WasmGetSignature(c *rpchttp.HTTP, rpcClient *http.Client, log logging.Logger) {
+	// get the current status
+	s, err := c.Status(context.Background())
+	if err != nil {
+		log.Fatal("error Status", zap.Error(err))
+		return
+	}
+
+	log.Info("got status", zap.Any("status", s))
+
+	height := s.SyncInfo.LatestBlockHeight
+	// get block info
+	block, err := c.Block(context.Background(), &height)
+	if err != nil {
+		log.Fatal("error Block", zap.Error(err))
+		return
+	}
+	blkID, err := ids.ToID(block.Block.Hash().Bytes())
+	if err != nil {
+		log.Fatal("error during map to json marshalling", zap.Error(err))
+		return
+	}
+	log.Info("Block Hash", zap.String("last block hash", block.Block.Hash().String()))
+	r := rand.New(rand.NewSource(99))
+	id := types.JSONRPCIntID(r.Intn(1000))
+
+	request, err := types.MapToRequest(id, "get_block_signature", map[string]interface{}{"blockID": blkID})
+	if err != nil {
+		log.Fatal("failed to encode params", zap.Error(err))
+		return
+	}
+
+	requestBytes, err := json.Marshal(request)
+	if err != nil {
+		log.Fatal("failed to marshal request", zap.Error(err))
+		return
+	}
+
+	requestBuf := bytes.NewBuffer(requestBytes)
+	resp, err := rpcClient.Post(c.Remote(), "application/json", requestBuf)
+	if err != nil {
+		log.Fatal(zap.Error(err).String)
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		log.Fatal("Unexpected response status code", zap.Int("status code", resp.StatusCode))
+	}
+
+	resBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal("Unable to read response body", zap.Error(err))
+	}
+
+	log.Info("GetBlockSignature result", zap.String("response body", string(resBody)))
 }
 
 func Query(c *rpchttp.HTTP, log logging.Logger) {
