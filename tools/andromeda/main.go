@@ -84,6 +84,12 @@ func main() {
 	chainService.GetBalances(acc1.Address)
 	chainService.GetBalances(acc2.Address)
 
+	err = chainService.UpdateAccountSequence(acc1.Name)
+	if err != nil {
+		log.Fatal("error getting account info", zap.Error(err))
+		return
+	}
+
 	// upload andromeda_kernel.wasm
 	msgInstKernelBytes, err := json.Marshal(map[string]interface{}{
 		"chain_name": internal.ChainID,

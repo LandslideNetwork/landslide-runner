@@ -114,6 +114,18 @@ func (c *ChainClient) IncreaseSequence(name string) error {
 	return nil
 }
 
+// SetSequence - sets a sequence number for the account.
+func (c *ChainClient) SetSequence(name string, seq uint64) error {
+	acc, ok := c.GetAccount(name)
+	if !ok {
+		return fmt.Errorf("account not found")
+	}
+
+	acc.Sequence = seq
+	c.signerAccounts[name] = acc
+	return nil
+}
+
 // GetSignedTxBytes - get signed tx bytes.
 func (c *ChainClient) GetSignedTxBytes(
 	signerAccountName string,
