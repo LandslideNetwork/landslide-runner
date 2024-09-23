@@ -1,0 +1,15 @@
+graph TD
+    fee_collector.wasm --> fee_distributor.wasm
+    whale_lair.wasm --> fee_distributor.wasm
+    incentive_factory.wasm --> frontend_helper.wasm
+    fee_collector.wasm --> incentive_factory.wasm
+    fee_distributor.wasm --> incentive_factory.wasm
+    terraswap_pair.wasm --> terraswap_factory.wasm
+    stableswap_3pool.wasm --> terraswap_factory.wasm
+    terraswap_token.wasm --> terraswap_factory.wasm
+    fee_collector.wasm --> terraswap_factory.wasm
+    terraswap_factory.wasm --> terraswap_router.wasm
+    vault.wasm --> vault_factory.wasm
+    terraswap_token.wasm --> vault_factory.wasm
+    fee_collector.wasm --> vault_factory.wasm
+    vault_factory.wasm --> vault_router.wasm

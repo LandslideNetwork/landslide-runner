@@ -15,9 +15,6 @@ import (
 	cd "whitewhale/internal/codec"
 )
 
-// SetPrefixes - set prefixes for the chain.
-const prefix = "wasm"
-
 var _ ChainClientInterface = &ChainClient{}
 
 // ChainClientInterface - chain client interface.
@@ -48,14 +45,12 @@ type (
 		Codec          cd.Codec
 		keyring        keyring.Keyring
 		log            *zap.Logger
+		denom          string
 	}
 )
 
 // NewChainClient - create a new chain client.
-func NewChainClient(
-	gasLimit uint64,
-	log *zap.Logger,
-) *ChainClient {
+func NewChainClient(gasLimit uint64, prefix string, chainID string, denom string, log *zap.Logger) *ChainClient {
 	SetPrefixes(prefix)
 	kr, err := NewKeyring()
 	if err != nil {
@@ -64,7 +59,8 @@ func NewChainClient(
 	}
 
 	return &ChainClient{
-		chainID:        ChainID,
+		chainID:        chainID,
+		denom:          denom,
 		gasLimit:       gasLimit,
 		signerAccounts: make(map[string]AccountInfo),
 		Codec:          cd.NewCodec(),
@@ -146,9 +142,9 @@ func (c *ChainClient) GetSignedTxBytes(
 	// Set the gas price
 	var gasPrice sdk.Coins
 	if gasPriceOverride == 0 {
-		gasPrice = defaultGasPrice
+		gasPrice = sdk.NewCoins(sdk.NewInt64Coin(c.denom, 100000))
 	} else {
-		gasPrice = sdk.NewCoins(sdk.NewInt64Coin(denom, int64(gasPriceOverride)))
+		gasPrice = sdk.NewCoins(sdk.NewInt64Coin(c.denom, int64(gasPriceOverride)))
 	}
 
 	// Create a new tx builder and set the message
@@ -158,7 +154,7 @@ func (c *ChainClient) GetSignedTxBytes(
 	}
 	// Set the fee amount and gas limit
 	txBuilder.SetFeeAmount(gasPrice)
-	txBuilder.SetGasLimit(gasPrice.AmountOf(denom).Mul(math.NewInt(2)).Uint64())
+	txBuilder.SetGasLimit(gasPrice.AmountOf(c.denom).Mul(math.NewInt(2)).Uint64())
 
 	// Sign the transaction
 	factory := tx.Factory{}.

@@ -8,18 +8,6 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
-const (
-	denom   = "stake"
-	ChainID = "landslide-test"
-)
-
-var defaultGasPrice = sdk.NewCoins(sdk.NewInt64Coin(denom, 100000))
-
-const (
-	User1Mnemonic = "tip yard art tape orchard universe angle flame wave gadget raven coyote crater ethics able evoke luxury predict leopard delay peanut embody blast soap"
-	User2Mnemonic = "thumb scorpion sting term fiscal dream nephew fitness session nation happy attitude canyon raise omit town garment enroll term trial math neglect truck feature"
-)
-
 // SetPrefixes - set prefix for accounts and validators.
 func SetPrefixes(accountAddressPrefix string) {
 	// Set prefixes
