@@ -92,6 +92,11 @@ func (c *ChainClient) AddAccount(name, mnemonic string, sequence, number uint64)
 	}
 }
 
+// GetDenom - get the denomination used by the chain client.
+func (c *ChainClient) GetDenom() string {
+	return c.denom
+}
+
 // GetAccount - get account by name.
 func (c *ChainClient) GetAccount(name string) (AccountInfo, bool) {
 	acc, ok := c.signerAccounts[name]

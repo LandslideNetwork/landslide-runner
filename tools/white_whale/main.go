@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
+	"time"
 
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/joho/godotenv"
@@ -14,7 +16,7 @@ import (
 
 const (
 	// blockchainID is the ID of the blockchain, which is used in the local RPC address
-	blockchainID = "mnTRdJ9SnuxH39hv4w1yE5qwsVFrA3pPw7Sa28vsPxR5ZvoPX"
+	blockchainID = "HLbGCVPnJ4kuFbk7Rbwmkuh1VFMzvysQHT8eXJkp7LM7RNG2F"
 )
 
 func main() {
@@ -55,7 +57,7 @@ func main() {
 	chainService := internal.NewChainService(client, c, log)
 
 	// get chain info
-	chainService.Info()
+	// chainService.Info()
 	chainService.GetBalances(acc1.Address)
 	chainService.GetBalances(acc2.Address)
 	// update account sequence
@@ -67,21 +69,162 @@ func main() {
 
 	deployer := internal.NewContractDeployer(acc1, chainService, client, log)
 
-	// whale_lair.wasm
-	msgInst := map[string]string{
-		"kernel_address": "sdf",
-		"owner":          acc1.Address,
-	}
-	_, _, err = deployer.UploadAndInstantiate(
-		msgInst,
-		"./artifacts/whale_lair.wasm",
+	// terra swap_token.wasm
+	tokenCodeID, tokenAddr, err := deployer.UploadAndInstantiate(
+		map[string]interface{}{
+			"name":     "TerraSwap Token",
+			"symbol":   "LND",
+			"decimals": 6,
+			"initial_balances": []map[string]string{
+				{
+					"address": acc1.Address,
+					"amount":  "10000000000000000",
+				},
+			},
+			"mint": map[string]string{
+				"minter": acc1.Address,
+				"cap":    "10000000000000000000000",
+			},
+		},
+		"./artifacts/terraswap_token.wasm",
 		5000000,
 	)
-
 	if err != nil {
 		log.Fatal("error deploying contract", zap.Error(err))
 		return
 	}
+	log.Info("Token contract deployed", zap.String("address", tokenAddr))
+	log.Info("Token contract deployed", zap.Uint64("codeID", tokenCodeID))
+
+	// fee_collector.wasm
+	feeCollCodeID, feeCollAddr, err := deployer.UploadAndInstantiate(
+		map[string]interface{}{},
+		"./artifacts/fee_collector.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error deploying contract", zap.Error(err))
+		return
+	}
+	log.Info("Fee collector contract deployed", zap.String("address", feeCollAddr))
+	log.Info("Fee collector contract deployed", zap.Uint64("codeID", feeCollCodeID))
+
+	// vault.wasm
+	vaultCodeID, err := deployer.Upload("./artifacts/vault.wasm", 5000000)
+	if err != nil {
+		log.Fatal("error deploying contract", zap.Error(err))
+		return
+	}
+	log.Info("Vault contract deployed", zap.Uint64("codeID", vaultCodeID))
+
+	// vault_factory.wasm
+	vaultFactoryCodeID, vaultFactoryAddr, err := deployer.UploadAndInstantiate(
+		map[string]interface{}{
+			"owner":              acc1.Address,
+			"vault_id":           vaultCodeID,
+			"token_id":           tokenCodeID,
+			"fee_collector_addr": feeCollAddr,
+		},
+		"./artifacts/vault_factory.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error deploying contract", zap.Error(err))
+		return
+	}
+	log.Info("Vault factory contract deployed", zap.String("address", vaultFactoryAddr))
+	log.Info("Vault factory contract deployed", zap.Uint64("codeID", vaultFactoryCodeID))
+
+	// vault_router.wasm
+	vaultRouterCodeID, vaultRouterAddr, err := deployer.UploadAndInstantiate(
+		map[string]interface{}{
+			"owner":              acc1.Address,
+			"vault_factory_addr": vaultFactoryAddr,
+		},
+		"./artifacts/vault_router.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error deploying contract", zap.Error(err))
+		return
+	}
+	log.Info("Vault router contract deployed", zap.String("address", vaultRouterAddr))
+	log.Info("Vault router contract deployed", zap.Uint64("codeID", vaultRouterCodeID))
+
+	// terraswap_pair.wasm
+	pairCodeID, err := deployer.Upload(
+		"./artifacts/terraswap_pair.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error deploying contract", zap.Error(err))
+		return
+	}
+	log.Info("Pair contract deployed", zap.Uint64("codeID", pairCodeID))
+
+	// stableswap_3pool.wasm
+	stableSwapCodeID, err := deployer.Upload(
+		"./artifacts/stableswap_3pool.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error deploying contract", zap.Error(err))
+		return
+	}
+	log.Info("StableSwap contract deployed", zap.Uint64("codeID", stableSwapCodeID))
+
+	// terraswap_factory.wasm
+	factoryCodeID, factoryAddr, err := deployer.UploadAndInstantiate(
+		map[string]interface{}{
+			"pair_code_id":       pairCodeID,
+			"trio_code_id":       stableSwapCodeID,
+			"token_code_id":      tokenCodeID,
+			"fee_collector_addr": feeCollAddr,
+		},
+		"./artifacts/terraswap_factory.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error deploying contract", zap.Error(err))
+		return
+	}
+	log.Info("Factory contract deployed", zap.String("address", factoryAddr))
+	log.Info("Factory contract deployed", zap.Uint64("codeID", factoryCodeID))
+
+	// terraswap_router.wasm
+	routerCodeID, routerAddr, err := deployer.UploadAndInstantiate(
+		map[string]interface{}{
+			"terraswap_factory": factoryAddr,
+		},
+		"./artifacts/terraswap_router.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error deploying contract", zap.Error(err))
+		return
+	}
+	log.Info("Router contract deployed", zap.String("address", routerAddr))
+	log.Info("Router contract deployed", zap.Uint64("codeID", routerCodeID))
+
+	// whale_lair.wasm
+	whaleLairCodeID, whaleLairAddr, err := deployer.UploadAndInstantiate(
+		map[string]interface{}{
+			"unbonding_period": fmt.Sprintf("%d", int64(time.Hour*24*7/time.Nanosecond)), // default value is 14 days, in nanoseconds
+			"growth_rate":      fmt.Sprintf("%f", math.Pow(2, 1.0/365)-1),                // this is the value when you interpolate the growth rate to 2X with 365 days of bonding
+			"bonding_assets": []map[string]interface{}{
+				{"native_token": map[string]string{"denom": client.GetDenom()}},
+				{"native_token": map[string]string{"denom": "factory/" + acc1.Address + "/test"}},
+			},
+		},
+		"./artifacts/whale_lair.wasm",
+		5000000,
+	)
+	if err != nil {
+		log.Fatal("error deploying contract", zap.Error(err))
+		return
+	}
+	log.Info("Whale Lair contract deployed", zap.String("address", whaleLairAddr))
+	log.Info("Whale Lair contract deployed", zap.Uint64("codeID", whaleLairCodeID))
 
 	log.Info("All contracts deployed successfully")
 }

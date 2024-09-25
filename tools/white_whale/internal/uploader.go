@@ -76,7 +76,6 @@ func (s *ChainService) DeployContract(signerName string, fileName string, gasPri
 		s.log.Fatal("error waiting for transaction", zap.Error(err))
 		return nil, err
 	}
-	s.log.Info("Deploy wasm contract check success", zap.Any("deployResTx", deployResTx.TxResult))
 
 	return deployResTx, nil
 }
@@ -104,7 +103,7 @@ func (s *ChainService) InstantiateContract(signerName string, codeID uint64, msg
 		return nil, err
 	}
 	// broadcast transaction async
-	s.log.Info("MsgInstantiateContract wasm contract")
+	s.log.Info("MsgInstantiateContract wasm contract", zap.Uint64("codeID", codeID))
 	res, err := s.BroadCastTxAsync(txBytes)
 	if err != nil {
 		s.log.Fatal("error MsgInstantiateContract", zap.Error(err))
@@ -118,7 +117,7 @@ func (s *ChainService) InstantiateContract(signerName string, codeID uint64, msg
 		s.log.Fatal("error waiting for transaction", zap.Error(err))
 		return nil, err
 	}
-	s.log.Info("MsgInstantiateContract check success", zap.Any("deployResTx", resTx.TxResult))
+
 	s.log.Info("Success! Instantiating wasm contract committed")
 
 	return resTx, nil

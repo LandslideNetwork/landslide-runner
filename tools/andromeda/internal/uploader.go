@@ -76,7 +76,7 @@ func (s *ChainService) DeployContract(signerName string, fileName string, gasPri
 		s.log.Fatal("error waiting for transaction", zap.Error(err))
 		return nil, err
 	}
-	s.log.Info("Deploy wasm contract check success", zap.Any("deployResTx", deployResTx.TxResult))
+	// s.log.Info("Deploy wasm contract check success", zap.Any("deployResTx", deployResTx.TxResult))
 
 	return deployResTx, nil
 }
@@ -118,7 +118,7 @@ func (s *ChainService) InstantiateContract(signerName string, codeID uint64, msg
 		s.log.Fatal("error waiting for transaction", zap.Error(err))
 		return nil, err
 	}
-	s.log.Info("MsgInstantiateContract check success", zap.Any("deployResTx", resTx.TxResult))
+	// s.log.Info("MsgInstantiateContract check success", zap.Any("deployResTx", resTx.TxResult))
 	s.log.Info("Success! Instantiating wasm contract committed")
 
 	return resTx, nil

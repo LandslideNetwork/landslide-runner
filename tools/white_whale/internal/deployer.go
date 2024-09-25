@@ -55,52 +55,89 @@ func (cd *ContractDeployer) IncreaseSequence() error {
 	return nil
 }
 
-// UploadAndInstantiate uploads and instantiates a smart contract
-func (cd *ContractDeployer) UploadAndInstantiate(msg interface{}, filepath string, gasPrice uint64) (string, string, error) {
-	msgBytes, err := json.Marshal(msg)
+// Upload uploads a smart contract and returns the code id
+func (cd *ContractDeployer) Upload(filepath string, gasPrice uint64) (uint64, error) {
+	err := cd.client.IncreaseSequence(cd.signer.Name)
 	if err != nil {
-		cd.log.Fatal("error marshaling instantiate message", zap.Error(err))
-		return "", "", err
+		cd.log.Fatal("error increasing sequence", zap.Error(err))
+		return 0, err
 	}
 
 	txRes, err := cd.chainService.DeployContract(cd.signer.Name, filepath, gasPrice)
 	if err != nil {
 		cd.log.Fatal("error storing code", zap.Error(err))
-		return "", "", err
+		return 0, err
+	}
+
+	rawCodeID, _, err := extractResultTxDetails(txRes)
+	if err != nil {
+		cd.log.Fatal("error getting code id", zap.Error(err))
+		return 0, err
+	}
+
+	codeID, err := strconv.ParseUint(rawCodeID, 10, 64)
+	if err != nil {
+		cd.log.Fatal("error parsing code id", zap.Error(err))
+		return 0, err
+	}
+
+	return codeID, nil
+}
+
+// UploadAndInstantiate uploads and instantiates a smart contract
+func (cd *ContractDeployer) UploadAndInstantiate(msg interface{}, filepath string, gasPrice uint64) (uint64, string, error) {
+	if err := cd.IncreaseSequence(); err != nil {
+		return 0, "", err
+	}
+
+	msgBytes, err := json.Marshal(msg)
+	if err != nil {
+		cd.log.Fatal("error marshaling instantiate message", zap.Error(err))
+		return 0, "", err
+	}
+
+	txRes, err := cd.chainService.DeployContract(cd.signer.Name, filepath, gasPrice)
+	if err != nil {
+		cd.log.Fatal("error storing code", zap.Error(err))
+		return 0, "", err
 	}
 
 	rawCodeID, _, err := extractResultTxDetails(txRes)
 	CodeID, err := strconv.ParseUint(rawCodeID, 10, 64)
 	if err != nil {
 		cd.log.Fatal("error parsing code id", zap.Error(err))
-		return "", "", err
+		return 0, "", err
 	}
 
-	err = cd.client.IncreaseSequence(cd.signer.Name)
-	if err != nil {
-		cd.log.Fatal("error increasing sequence", zap.Error(err))
-		return "", "", err
+	if err := cd.IncreaseSequence(); err != nil {
+		return 0, "", err
 	}
 
 	txRes, err = cd.chainService.InstantiateContract(cd.signer.Name, CodeID, msgBytes, 2000000)
 	if err != nil {
 		cd.log.Fatal("error instantiating wasm contract", zap.Error(err))
-		return "", "", err
+		return 0, "", err
 	}
 
 	rawContractCodeID, rawContractAddress, err := extractResultTxDetails(txRes)
 	if err != nil {
 		cd.log.Fatal("error extracting contract details", zap.Error(err))
-		return "", "", err
+		return 0, "", err
 	}
 
 	cd.log.Info(
-		fmt.Sprintf("Contract deployed: %s\n", filepath),
-		zap.String(fmt.Sprintf("\ncontract_address:"), rawContractAddress),
-		zap.String(fmt.Sprintf("\ncode_id:"), rawContractCodeID),
+		fmt.Sprintf("Contract deployed: %s", filepath),
+		zap.String(fmt.Sprintf("contract_address:"), rawContractAddress),
+		zap.String(fmt.Sprintf("code_id:"), rawContractCodeID),
 	)
 
-	return rawContractCodeID, rawContractAddress, nil
+	codeID, err := strconv.ParseUint(rawContractCodeID, 10, 64)
+	if err != nil {
+		cd.log.Fatal("error parsing code id", zap.Error(err))
+		return 0, "", err
+	}
+
+	return codeID, rawContractAddress, nil
 }
 
 // extractResultTxDetails extracts contract details from the transaction result

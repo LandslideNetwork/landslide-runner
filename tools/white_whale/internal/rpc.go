@@ -28,13 +28,12 @@ func (s *ChainService) BroadCastTxAsync(txBytes []byte) (*coretypes.ResultBroadc
 
 // WaitTx - wait for transaction to be committed
 func (s *ChainService) WaitTx(txHash []byte) (*coretypes.ResultTx, error) {
+	s.log.Info("Waiting for transaction to be committed")
 	for i := 0; i < 30; i++ {
-		s.log.Info("Waiting for transaction to be committed")
-
 		<-time.After(5 * time.Second)
 		execResultTx, err := s.c.Tx(context.Background(), txHash, false)
 		if err != nil {
-			s.log.Info("Error getting transaction, waiting another 5 sek...")
+			s.log.Info("waiting for transaction another 5 sek...")
 			continue
 		}
 
@@ -43,7 +42,6 @@ func (s *ChainService) WaitTx(txHash []byte) (*coretypes.ResultTx, error) {
 			return nil, errors.New("error executing wasm contract")
 		}
 
-		s.log.Info("Success! Executing committed")
 		return execResultTx, nil
 	}
 
