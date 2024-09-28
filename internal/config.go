@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	defaultTimeoutBroadcastTxCommit uint16 = 10
+	defaultTimeoutBroadcastTxCommit uint16 = 180
 	defaultNetworkName                     = "landslide-test"
 )
 
