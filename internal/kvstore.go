@@ -13,7 +13,7 @@ import (
 
 // RunKVStoreTests runs the key value store tests
 func RunKVStoreTests(rpcAddr string, log logging.Logger) {
-	c, err := rpchttp.New(rpcAddr, "/websocket")
+	c, err := rpchttp.NewWithTimeout(rpcAddr, "/websocket", 300) // Increased timeout to 300 seconds
 	if err != nil {
 		log.Fatal("error creating client", zap.Error(err)) //nolint:gocritic
 	}
@@ -173,17 +173,36 @@ func Commit(c *rpchttp.HTTP, log logging.Logger) {
 	log.Info("got status", zap.Any("status", s))
 
 	height := s.SyncInfo.LatestBlockHeight
+	nextHeight := int64(0)
+	for i := 0; i < 2; i++ {
+		log.Info("BroadcastTxSync")
+		start := time.Now() // Capture the start time
 
-	// Create a transaction
-	_, _, tx := MakeTxKV()
+		// Create a transaction
+		_, _, tx := MakeTxKV()
 
-	_, err = c.BroadcastTxCommit(context.Background(), tx)
-	if err != nil {
-		log.Fatal("BroadcastTxSync error", zap.Error(err))
-		return
+		res, err := c.BroadcastTxCommit(context.Background(), tx)
+		if err != nil {
+			log.Error("BroadcastTxCommit error", zap.Error(err))
+			elapsed := time.Since(start)
+			log.Info("Time spent on iteration", zap.Int("iteration", i), zap.Duration("elapsed", elapsed))
+			return
+		}
+
+		log.Info("BroadcastTxCommit transaction success", zap.Any("res", res))
+
+		elapsed := time.Since(start) // Calculate the elapsed time
+		log.Info("Time spent on iteration", zap.Int("iteration", i), zap.Duration("elapsed", elapsed))
+
+		nextHeight = height + int64(i+1)
+		block, err := c.BlockResults(context.Background(), &nextHeight)
+		if err != nil {
+			log.Fatal("error BlockResults", zap.Error(err))
+			return
+		}
+		log.Info("BlockResults success", zap.Any("block", block))
 	}
 
-	nextHeight := height + 1
 	commit, err := c.Commit(context.Background(), &nextHeight)
 	if err != nil {
 		log.Fatal("error Commit", zap.Error(err))
