@@ -14,6 +14,8 @@ const (
 type AppConfig struct {
 	RPCPort  uint16 `json:"rpc_port"`
 	GRPCPort uint16 `json:"grpc_port"`
+	APIPort  uint16 `json:"api_port"`
+	APIHost  string `json:"api_host"`
 }
 
 type Config struct {

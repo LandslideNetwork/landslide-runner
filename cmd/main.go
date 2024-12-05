@@ -24,6 +24,8 @@ const (
 	healthyTimeout         = 2 * time.Minute
 	subnetFileName         = "pjSL9ksard4YE96omaiTkGL5H6XX2W5VEo3ZgWC9S2P6gzs9A"
 	defaultGrpcPort uint16 = 9090
+	defaultAPIPort  uint16 = 1317
+	defaultAPIHost         = "localhost"
 )
 
 var (
@@ -203,6 +205,8 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 
 	perNodeChainConfig := make(map[string][]byte)
 	grpcPort := defaultGrpcPort
+	appCfg.APIHost = defaultAPIHost
+	apiPort := defaultAPIPort
 	for i := range nodeNames {
 		node, err := nw.GetNode(nodeNames[i])
 		if err != nil {
@@ -217,6 +221,7 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 
 		appCfg.GRPCPort = grpcPort
 		appCfg.RPCPort = node.GetAPIPort()
+		appCfg.APIPort = apiPort
 
 		// Marshal the AppConfig into JSON
 		appConfigJSON, err := json.Marshal(appCfg)
@@ -232,6 +237,7 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 
 		perNodeChainConfig[node.GetName()] = cfgBytes
 		grpcPort++
+		apiPort++
 	}
 
 	chains, err := nw.CreateBlockchains(context.Background(), []network.BlockchainSpec{
@@ -256,21 +262,25 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 	}
 
 	rpcUrls := make([]string, len(nodeNames))
-	grpcUrls := make([]string, len(nodeNames))
 	grpcPort = defaultGrpcPort
+	apiHost := defaultAPIHost
+	apiPort = defaultAPIPort
 	for i := range nodeNames {
 		node, err := nw.GetNode(nodeNames[i])
 		if err != nil {
 			return nil, err
 		}
 		rpcUrls[i] = fmt.Sprintf("http://127.0.0.1:%d/ext/bc/%s/rpc", node.GetAPIPort(), chains[0])
-		grpcUrls[i] = fmt.Sprintf("http://127.0.0.1:%d", grpcPort)
+		grpcURL := fmt.Sprintf("http://127.0.0.1:%d", grpcPort)
+		apiURL := fmt.Sprintf("http://%s:%d", apiHost, apiPort)
 		log.Info("subnet rpc url",
 			zap.String("node", nodeNames[i]),
 			zap.String("rpc", rpcUrls[i]),
-			zap.String("grpc", grpcUrls[i]),
+			zap.String("grpc", grpcURL),
+			zap.String("api", apiURL),
 		)
 		grpcPort++
+		apiPort++
 	}
 
 	return rpcUrls, nil
