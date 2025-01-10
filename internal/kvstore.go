@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
+	"github.com/ava-labs/avalanchego/vms/platformvm/warp"
 	"github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	"io"
 	"math/rand"
@@ -13,27 +16,29 @@ import (
 	"time"
 
 	"github.com/ava-labs/avalanchego/utils/logging"
+	bftrand "github.com/cometbft/cometbft/libs/rand"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
-	jsonrpcclient "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 	"go.uber.org/zap"
 )
 
 var httpClient = http.DefaultClient
 
 // RunKVStoreTests runs the key value store tests
-func RunKVStoreTests(rpcAddr string, log logging.Logger) {
+func RunKVStoreTests(rpcAddr string, networkID uint32, chainID ids.ID, log logging.Logger) {
 	c, err := rpchttp.New(rpcAddr, "/websocket")
 	if err != nil {
 		log.Fatal("error creating client", zap.Error(err)) //nolint:gocritic
 	}
-	rpcClient, err := jsonrpcclient.DefaultHTTPClient(rpcAddr)
+	warpClient, err := NewClient(rpcAddr)
 	<-time.After(2 * time.Second) // wait for first block to be committed
 
 	CheckTX(c, log)
 	Info(c, log)
 	Query(c, log)
 	Commit(c, log)
-	WasmGetSignature(c, rpcClient, log)
+	WARPGetMessage(warpClient, networkID, chainID, log)
+	WARPGetMessageSignature(warpClient, networkID, chainID, log)
+	WARPGetBlockSignature(c, warpClient, log)
 
 	GenerateTXSAsync(c, log, 200)
 }
@@ -239,7 +244,92 @@ func Commit(c *rpchttp.HTTP, log logging.Logger) {
 	log.Info("Commit success")
 }
 
-func WasmGetSignature(c *rpchttp.HTTP, rpcClient *http.Client, log logging.Logger) {
+func WARPGetMessage(warpClient Client, networkID uint32, chainID ids.ID, log logging.Logger) {
+	msg, err := warp.NewUnsignedMessage(networkID, chainID, []byte(bftrand.Str(24)))
+	if err != nil {
+		log.Fatal("failed to unsigned message creation", zap.Error(err))
+		return
+	}
+	err = msg.Initialize()
+	if err != nil {
+		log.Fatal("failed to unsigned message initialize", zap.Error(err))
+		return
+	}
+	resultAddMsg, err := warpClient.AddMessage(context.Background(), msg.Bytes())
+	if err != nil {
+		log.Fatal("failed to warp add message", zap.Error(err))
+		return
+	}
+	resultGetMsg, err := warpClient.GetMessage(context.Background(), msg.ID())
+	if err != nil {
+		log.Fatal("failed to warp get message", zap.Error(err))
+		return
+	}
+	resultMsg, err := warp.ParseMessage(resultGetMsg)
+	if err != nil {
+		log.Fatal("failed to warp get message", zap.Error(err))
+		return
+	}
+	if msg.NetworkID != resultMsg.NetworkID {
+		log.Info("warp_get_message", zap.String("value", fmt.Sprintf("%d", msg.NetworkID)), zap.String("expected", fmt.Sprintf("%d", resultMsg.NetworkID)))
+		log.Fatal("warp_get_message returned value does not match sent value")
+		return
+	}
+	if msg.SourceChainID != resultMsg.SourceChainID {
+		log.Info("warp_get_message", zap.String("value", msg.SourceChainID.String()), zap.String("expected", resultMsg.SourceChainID.String()))
+		log.Fatal("warp_get_message returned value does not match sent value")
+		return
+	}
+	if !bytes.Equal(msg.Payload, resultMsg.Payload) {
+		log.Info("warp_get_message", zap.String("value", string(msg.Payload)), zap.String("expected", string(resultMsg.Payload)))
+		log.Fatal("warp_get_message returned value does not match sent value")
+		return
+	}
+
+	log.Info("AddMessage result", zap.String("response body", string(resultAddMsg)))
+}
+
+func WARPGetMessageSignature(warpClient Client, networkID uint32, chainID ids.ID, log logging.Logger) {
+	msg, err := warp.NewUnsignedMessage(networkID, chainID, []byte(bftrand.Str(24)))
+	if err != nil {
+		log.Fatal("failed to unsigned message creation", zap.Error(err))
+		return
+	}
+	err = msg.Initialize()
+	if err != nil {
+		log.Fatal("failed to unsigned message initialize", zap.Error(err))
+		return
+	}
+	resultAddMsg, err := warpClient.AddMessage(context.Background(), msg.Bytes())
+	if err != nil {
+		log.Fatal("failed to warp add message", zap.Error(err))
+		return
+	}
+	log.Info("AddMessage result", zap.String("response body", string(resultAddMsg)))
+	resultMsgSignature, err := warpClient.GetMessageSignature(context.Background(), msg.ID())
+	if err != nil {
+		log.Fatal("failed to warp get message", zap.Error(err))
+		return
+	}
+	secretKey, err := bls.SecretKeyFromBytes([]byte(bftrand.Str(24)))
+	if err != nil {
+		log.Fatal("failed to parse secret key from bytes", zap.Error(err))
+		return
+	}
+	warpSigner := warp.NewSigner(secretKey, networkID, chainID)
+	expectedMsgSignature, err := warpSigner.Sign(msg)
+	if err != nil {
+		log.Fatal("failed to sign message", zap.Error(err))
+		return
+	}
+	if !bytes.Equal(resultMsgSignature, expectedMsgSignature) {
+		log.Info("warp_get_message_signature", zap.String("value", string(resultMsgSignature)), zap.String("expected", string(expectedMsgSignature)))
+		log.Fatal("warp_get_message returned value does not match sent value")
+		return
+	}
+}
+
+func WARPGetBlockSignature(c *rpchttp.HTTP, warpClient Client, log logging.Logger) {
 	// get the current status
 	s, err := c.Status(context.Background())
 	if err != nil {
@@ -262,37 +352,42 @@ func WasmGetSignature(c *rpchttp.HTTP, rpcClient *http.Client, log logging.Logge
 		return
 	}
 	log.Info("Block Hash", zap.String("last block hash", block.Block.Hash().String()))
+
+	resBody, err := warpClient.GetBlockSignature(context.Background(), blkID)
+	if err != nil {
+		log.Fatal("Unable to read response body", zap.Error(err))
+	}
+
+	log.Info("GetBlockSignature result", zap.String("response body", string(resBody)))
+}
+
+func sendWARPRequest(c *rpchttp.HTTP, rpcClient *http.Client, method string, params map[string]interface{}, log logging.Logger) ([]byte, error) {
 	r := rand.New(rand.NewSource(99))
 	id := types.JSONRPCIntID(r.Intn(1000))
 
-	request, err := types.MapToRequest(id, "get_block_signature", map[string]interface{}{"blockID": blkID})
+	request, err := types.MapToRequest(id, method, params)
 	if err != nil {
 		log.Fatal("failed to encode params", zap.Error(err))
-		return
+		return nil, err
 	}
 
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
 		log.Fatal("failed to marshal request", zap.Error(err))
-		return
+		return nil, err
 	}
 
 	requestBuf := bytes.NewBuffer(requestBytes)
 	resp, err := rpcClient.Post(c.Remote(), "application/json", requestBuf)
 	if err != nil {
 		log.Fatal(zap.Error(err).String)
-		return
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		log.Fatal("Unexpected response status code", zap.Int("status code", resp.StatusCode))
 	}
 
-	resBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatal("Unable to read response body", zap.Error(err))
-	}
-
-	log.Info("GetBlockSignature result", zap.String("response body", string(resBody)))
+	return io.ReadAll(resp.Body)
 }
 
 func Query(c *rpchttp.HTTP, log logging.Logger) {

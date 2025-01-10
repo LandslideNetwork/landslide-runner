@@ -14,7 +14,7 @@ It downloads compatible version of AvalanceGo.
 
 ### Build subnet
 
-Run following command from [landslidevm](https://github.com/ConsiderItDone/landslidevm) repo to download AvalancheGo
+Run following command from [landslidevm](https://github.com/ConsiderItDone/landslidevm) repo to build LandslideVM
 
 ```shell
 ./scripts/build.sh /tmp/e2e-test-landslide/avalanchego/plugins/pjSL9ksard4YE96omaiTkGL5H6XX2W5VEo3ZgWC9S2P6gzs9A

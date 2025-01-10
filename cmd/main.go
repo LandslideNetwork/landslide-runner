@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"github.com/ava-labs/avalanchego/ids"
 	"go/build"
 	"os"
 	"time"
@@ -72,7 +73,7 @@ func main() {
 								fmt.Println(err)
 								os.Exit(1)
 							}
-							_, err = runNodes(log, binaryPath, genesisKvStore, nw)
+							_, _, err = runNodes(log, binaryPath, genesisKvStore, nw)
 							if err != nil {
 								log.Fatal("error starting nodes", zap.Error(err))
 								return cli.Exit("exiting", 1)
@@ -91,7 +92,7 @@ func main() {
 								fmt.Println(err)
 								os.Exit(1)
 							}
-							_, err = runNodes(log, binaryPath, genesisWasm, nw)
+							_, _, err = runNodes(log, binaryPath, genesisWasm, nw)
 							if err != nil {
 								log.Fatal("error starting nodes", zap.Error(err))
 								return cli.Exit("exiting", 1)
@@ -122,7 +123,7 @@ func main() {
 								}
 							}()
 
-							rpcs, err := runNodes(log, binaryPath, genesisKvStore, nw)
+							rpcs, chainID, err := runNodes(log, binaryPath, genesisKvStore, nw)
 							if err != nil {
 								log.Fatal("error starting nodes", zap.Error(err))
 								return cli.Exit("exiting", 1)
@@ -131,8 +132,12 @@ func main() {
 								log.Fatal("no rpcs")
 								return cli.Exit("exiting", 1)
 							}
-
-							internal.RunKVStoreTests(rpcs[0], log)
+							networkID, err := nw.GetNetworkID()
+							if err != nil {
+								fmt.Println(err)
+								os.Exit(1)
+							}
+							internal.RunKVStoreTests(rpcs[0], networkID, chainID, log)
 							return nil
 						},
 					},
@@ -145,7 +150,7 @@ func main() {
 								fmt.Println(err)
 								os.Exit(1)
 							}
-							rpcs, err := runNodes(log, binaryPath, genesisWasm, nw)
+							rpcs, _, err := runNodes(log, binaryPath, genesisWasm, nw)
 							if err != nil {
 								log.Fatal("error starting nodes", zap.Error(err))
 								return cli.Exit("exiting", 1)
@@ -185,16 +190,16 @@ func main() {
 	}
 }
 
-func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.Network) ([]string, error) {
+func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.Network) ([]string, ids.ID, error) {
 	// Wait until the nodes in the network are ready
 	if err := internal.Await(nw, log, healthyTimeout); err != nil {
-		return nil, err
+		return nil, ids.Empty, err
 	}
 
 	// Add some chain
 	nodeNames, err := nw.GetNodeNames()
 	if err != nil {
-		return nil, err
+		return nil, ids.Empty, err
 	}
 
 	vmCfg := internal.Config{}
@@ -206,13 +211,13 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 	for i := range nodeNames {
 		node, err := nw.GetNode(nodeNames[i])
 		if err != nil {
-			return nil, err
+			return nil, ids.Empty, err
 		}
 		if _, err := internal.Copy(
 			fmt.Sprintf("%s/plugins/%s", binaryPath, subnetFileName),
 			fmt.Sprintf("%s/plugins/%s", node.GetDataDir(), subnetFileName),
 		); err != nil {
-			return nil, err
+			return nil, ids.Empty, err
 		}
 
 		appCfg.GRPCPort = grpcPort
@@ -221,13 +226,13 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		// Marshal the AppConfig into JSON
 		appConfigJSON, err := json.Marshal(appCfg)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal AppConfig: %w", err)
+			return nil, ids.Empty, fmt.Errorf("failed to marshal AppConfig: %w", err)
 		}
 		vmCfg.AppConfig = appConfigJSON
 
 		cfgBytes, err := json.Marshal(vmCfg)
 		if err != nil {
-			return nil, err
+			return nil, ids.Empty, err
 		}
 
 		perNodeChainConfig[node.GetName()] = cfgBytes
@@ -247,12 +252,12 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, ids.Empty, err
 	}
 
 	// Wait until the nodes in the network are ready
 	if err := internal.Await(nw, log, healthyTimeout); err != nil {
-		return nil, err
+		return nil, ids.Empty, err
 	}
 
 	rpcUrls := make([]string, len(nodeNames))
@@ -261,7 +266,7 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 	for i := range nodeNames {
 		node, err := nw.GetNode(nodeNames[i])
 		if err != nil {
-			return nil, err
+			return nil, ids.Empty, err
 		}
 		rpcUrls[i] = fmt.Sprintf("http://127.0.0.1:%d/ext/bc/%s/rpc", node.GetAPIPort(), chains[0])
 		grpcUrls[i] = fmt.Sprintf("http://127.0.0.1:%d", grpcPort)
@@ -273,7 +278,7 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		grpcPort++
 	}
 
-	return rpcUrls, nil
+	return rpcUrls, chains[0], nil
 }
 
 func createNetwork(log logging.Logger, binaryPath string, workDir string) (network.Network, error) {
