@@ -4,25 +4,37 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
+	"github.com/ava-labs/avalanchego/vms/platformvm/warp"
+
 	"github.com/ava-labs/avalanchego/utils/logging"
+	bftrand "github.com/cometbft/cometbft/libs/rand"
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"go.uber.org/zap"
 )
 
+var httpClient = http.DefaultClient
+
 // RunKVStoreTests runs the key value store tests
-func RunKVStoreTests(rpcAddr string, log logging.Logger) {
+func RunKVStoreTests(rpcAddr string, networkID uint32, chainID ids.ID, secretKey *bls.SecretKey, log logging.Logger) {
 	c, err := rpchttp.New(rpcAddr, "/websocket")
 	if err != nil {
 		log.Fatal("error creating client", zap.Error(err)) //nolint:gocritic
 	}
+	warpClient, err := NewClient(rpcAddr)
 	<-time.After(2 * time.Second) // wait for first block to be committed
 
 	CheckTX(c, log)
 	Info(c, log)
 	Query(c, log)
 	Commit(c, log)
+	WARPGetMessage(warpClient, networkID, chainID, log)
+	WARPGetMessageSignature(warpClient, networkID, chainID, secretKey, log)
 
 	GenerateTXSAsync(c, log, 200)
 }
@@ -226,6 +238,86 @@ func Commit(c *rpchttp.HTTP, log logging.Logger) {
 	}
 
 	log.Info("Commit success")
+}
+
+func WARPGetMessage(warpClient Client, networkID uint32, chainID ids.ID, log logging.Logger) {
+	msg, err := warp.NewUnsignedMessage(networkID, chainID, []byte(bftrand.Str(24)))
+	if err != nil {
+		log.Fatal("failed to create unsigned message", zap.Error(err))
+		return
+	}
+	err = msg.Initialize()
+	if err != nil {
+		log.Fatal("failed to initialize unsigned message", zap.Error(err))
+		return
+	}
+	resultAddMsg, err := warpClient.AddMessage(context.Background(), msg.Bytes())
+	if err != nil {
+		log.Fatal("failed to warp add message", zap.Error(err))
+		return
+	}
+	resultGetMsg, err := warpClient.GetMessage(context.Background(), msg.ID())
+	if err != nil {
+		log.Fatal("failed to warp get message", zap.Error(err))
+		return
+	}
+	resultMsg, err := warp.ParseUnsignedMessage(resultGetMsg.Message)
+	if err != nil {
+		log.Fatal("failed to warp get message", zap.Error(err))
+		return
+	}
+	if msg.NetworkID != resultMsg.NetworkID {
+		log.Info("warp_get_message", zap.String("value", fmt.Sprintf("%d", msg.NetworkID)), zap.String("expected", fmt.Sprintf("%d", resultMsg.NetworkID)))
+		log.Fatal("warp_get_message returned value does not match sent value")
+		return
+	}
+	if msg.SourceChainID != resultMsg.SourceChainID {
+		log.Info("warp_get_message", zap.String("value", msg.SourceChainID.String()), zap.String("expected", resultMsg.SourceChainID.String()))
+		log.Fatal("warp_get_message returned value does not match sent value")
+		return
+	}
+	if !bytes.Equal(msg.Payload, resultMsg.Payload) {
+		log.Info("warp_get_message", zap.String("value", string(msg.Payload)), zap.String("expected", string(resultMsg.Payload)))
+		log.Fatal("warp_get_message returned value does not match sent value")
+		return
+	}
+
+	log.Info("AddMessage result", zap.String("response body", resultAddMsg.MessageID))
+}
+
+func WARPGetMessageSignature(warpClient Client, networkID uint32, chainID ids.ID, secretKey *bls.SecretKey, log logging.Logger) {
+	msg, err := warp.NewUnsignedMessage(networkID, chainID, []byte(bftrand.Str(24)))
+	if err != nil {
+		log.Fatal("failed to create unsigned message", zap.Error(err))
+		return
+	}
+	err = msg.Initialize()
+	if err != nil {
+		log.Fatal("failed to initialize unsigned message", zap.Error(err))
+		return
+	}
+	resultAddMsg, err := warpClient.AddMessage(context.Background(), msg.Bytes())
+	if err != nil {
+		log.Fatal("failed to warp add message", zap.Error(err))
+		return
+	}
+	log.Info("AddMessage result", zap.String("response body", resultAddMsg.MessageID))
+	resultMsgSignature, err := warpClient.GetMessageSignature(context.Background(), msg.ID())
+	if err != nil {
+		log.Fatal("failed to warp get message", zap.Error(err))
+		return
+	}
+	warpSigner := warp.NewSigner(secretKey, networkID, chainID)
+	expectedMsgSignature, err := warpSigner.Sign(msg)
+	if err != nil {
+		log.Fatal("failed to sign message", zap.Error(err))
+		return
+	}
+	if !bytes.Equal(resultMsgSignature.Signature, expectedMsgSignature) {
+		log.Info("warp_get_message_signature", zap.String("value", string(resultMsgSignature.Signature)), zap.String("expected", string(expectedMsgSignature)))
+		log.Fatal("warp_get_message returned value does not match sent value")
+		return
+	}
 }
 
 func Query(c *rpchttp.HTTP, log logging.Logger) {

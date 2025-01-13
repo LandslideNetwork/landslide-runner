@@ -8,6 +8,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
+
 	"github.com/ava-labs/avalanche-network-runner/local"
 	"github.com/ava-labs/avalanche-network-runner/network"
 	"github.com/ava-labs/avalanchego/config"
@@ -36,6 +39,13 @@ var (
 	//go:embed data/testdata/nameservice.wasm.hex
 	nameserviceDeployHex string
 )
+
+type NodesConfiguration struct {
+	RPCs       []string
+	ChainID    ids.ID
+	SecretKeys map[string]*bls.SecretKey
+	NodeNames  []string
+}
 
 func main() {
 	// Create the logger
@@ -122,17 +132,21 @@ func main() {
 								}
 							}()
 
-							rpcs, err := runNodes(log, binaryPath, genesisKvStore, nw)
+							cfg, err := runNodes(log, binaryPath, genesisKvStore, nw)
 							if err != nil {
 								log.Fatal("error starting nodes", zap.Error(err))
 								return cli.Exit("exiting", 1)
 							}
-							if len(rpcs) == 0 {
+							if len(cfg.RPCs) == 0 {
 								log.Fatal("no rpcs")
 								return cli.Exit("exiting", 1)
 							}
-
-							internal.RunKVStoreTests(rpcs[0], log)
+							networkID, err := nw.GetNetworkID()
+							if err != nil {
+								fmt.Println(err)
+								os.Exit(1)
+							}
+							internal.RunKVStoreTests(cfg.RPCs[0], networkID, cfg.ChainID, cfg.SecretKeys[cfg.NodeNames[0]], log)
 							return nil
 						},
 					},
@@ -145,19 +159,19 @@ func main() {
 								fmt.Println(err)
 								os.Exit(1)
 							}
-							rpcs, err := runNodes(log, binaryPath, genesisWasm, nw)
+							cfg, err := runNodes(log, binaryPath, genesisWasm, nw)
 							if err != nil {
 								log.Fatal("error starting nodes", zap.Error(err))
 								return cli.Exit("exiting", 1)
 							}
 
-							if len(rpcs) == 0 {
+							if len(cfg.RPCs) == 0 {
 								log.Fatal("no rpcs")
 								return cli.Exit("exiting", 1)
 							}
 
 							internal.RunWASMTests(
-								rpcs,
+								cfg.RPCs,
 								log,
 								nameserviceDeployHex,
 							)
@@ -185,7 +199,7 @@ func main() {
 	}
 }
 
-func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.Network) ([]string, error) {
+func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.Network) (*NodesConfiguration, error) {
 	// Wait until the nodes in the network are ready
 	if err := internal.Await(nw, log, healthyTimeout); err != nil {
 		return nil, err
@@ -203,6 +217,15 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 
 	perNodeChainConfig := make(map[string][]byte)
 	grpcPort := defaultGrpcPort
+
+	secretKeys := make(map[string]*bls.SecretKey)
+	for i := range nodeNames {
+		node, err := nw.GetNode(nodeNames[i])
+		if err != nil {
+			return nil, err
+		}
+		vmCfg.VMConfig.AddressBook[node.GetNodeID().String()] = fmt.Sprintf("http://127.0.0.1:%d", node.GetAPIPort())
+	}
 	for i := range nodeNames {
 		node, err := nw.GetNode(nodeNames[i])
 		if err != nil {
@@ -224,6 +247,17 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 			return nil, fmt.Errorf("failed to marshal AppConfig: %w", err)
 		}
 		vmCfg.AppConfig = appConfigJSON
+
+		sk, err := bls.NewSecretKey()
+		if err != nil {
+			return nil, err
+		}
+
+		secretKeys[node.GetName()] = sk
+
+		skBytes := bls.SecretKeyToBytes(sk)
+
+		vmCfg.VMConfig.BLSSecretKey = skBytes
 
 		cfgBytes, err := json.Marshal(vmCfg)
 		if err != nil {
@@ -273,7 +307,14 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		grpcPort++
 	}
 
-	return rpcUrls, nil
+	cfg := &NodesConfiguration{
+		RPCs:       rpcUrls,
+		ChainID:    chains[0],
+		SecretKeys: secretKeys,
+		NodeNames:  nodeNames,
+	}
+
+	return cfg, nil
 }
 
 func createNetwork(log logging.Logger, binaryPath string, workDir string) (network.Network, error) {

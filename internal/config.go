@@ -22,14 +22,17 @@ type Config struct {
 }
 
 type VMConfig struct {
-	NetworkName              string `json:"network_name"`
-	TimeoutBroadcastTxCommit uint16 `json:"timeout_broadcast_tx_commit"`
+	NetworkName              string            `json:"network_name"`
+	TimeoutBroadcastTxCommit uint16            `json:"timeout_broadcast_tx_commit"`
+	BLSSecretKey             []byte            `json:"bls_secret_key"`
+	AddressBook              map[string]string `json:"address_book"`
 }
 
 // SetDefaults sets the default values for the config.
 func (c *VMConfig) SetDefaults() {
 	c.NetworkName = defaultNetworkName
 	c.TimeoutBroadcastTxCommit = defaultTimeoutBroadcastTxCommit
+	c.AddressBook = make(map[string]string)
 }
 
 // Validate returns an error if this is an invalid config.
