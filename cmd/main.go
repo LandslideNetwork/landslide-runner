@@ -268,17 +268,6 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		grpcPort++
 	}
 
-	//sk, err := bls.NewSecretKey()
-	//if err != nil {
-	//	return nil, ids.Empty, err
-	//}
-	//
-	//skBytes := bls.SecretKeyToBytes(sk)
-	//
-	//chainConfig := vmtypes.Config{
-	//	VMConfig: vmtypes.VMConfig{BLSSecretKey: skBytes},
-	//}
-
 	chains, err := nw.CreateBlockchains(context.Background(), []network.BlockchainSpec{
 		{
 			VMName:      "landslidevm",

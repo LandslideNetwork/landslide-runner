@@ -307,11 +307,6 @@ func WARPGetMessageSignature(warpClient Client, networkID uint32, chainID ids.ID
 		log.Fatal("failed to warp get message", zap.Error(err))
 		return
 	}
-	//secretKey, err := bls.SecretKeyFromBytes([]byte(bftrand.Str(24)))
-	//if err != nil {
-	//	log.Fatal("failed to parse secret key from bytes", zap.Error(err))
-	//	return
-	//}
 	warpSigner := warp.NewSigner(secretKey, networkID, chainID)
 	expectedMsgSignature, err := warpSigner.Sign(msg)
 	if err != nil {
