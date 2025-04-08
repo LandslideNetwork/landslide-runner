@@ -7,8 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	tmbytes "github.com/cometbft/cometbft/libs/bytes"
-
 	"github.com/ava-labs/avalanchego/ids"
 	jsonrpc "github.com/cometbft/cometbft/rpc/jsonrpc/client"
 )
@@ -31,13 +29,17 @@ type ResultGetBlockSignature struct {
 	Signature []byte `json:"signature"`
 }
 
+type ResultGetAggregatedSignature struct {
+	Message []byte `json:"message"`
+}
+
 type Client interface {
 	AddMessage(ctx context.Context, message []byte) (*ResultAddMessage, error)
 	GetMessage(ctx context.Context, messageID ids.ID) (*ResultGetMessage, error)
 	GetMessageSignature(ctx context.Context, messageID ids.ID) (*ResultGetMessageSignature, error)
-	GetMessageAggregateSignature(ctx context.Context, messageID ids.ID, quorumNum uint64, subnetIDStr string) ([]byte, error)
+	GetMessageAggregateSignature(ctx context.Context, messageID ids.ID, quorumNum uint64, subnetIDStr string) (*ResultGetAggregatedSignature, error)
 	GetBlockSignature(ctx context.Context, blockID ids.ID) (*ResultGetBlockSignature, error)
-	GetBlockAggregateSignature(ctx context.Context, blockID ids.ID, quorumNum uint64, subnetIDStr string) ([]byte, error)
+	GetBlockAggregateSignature(ctx context.Context, blockID ids.ID, quorumNum uint64, subnetIDStr string) (*ResultGetAggregatedSignature, error)
 }
 
 // client implementation for interacting with EVM [chain]
@@ -80,8 +82,8 @@ func (c *client) GetMessageSignature(ctx context.Context, messageID ids.ID) (*Re
 	return res, nil
 }
 
-func (c *client) GetMessageAggregateSignature(ctx context.Context, messageID ids.ID, quorumNum uint64, subnetIDStr string) ([]byte, error) {
-	var res tmbytes.HexBytes
+func (c *client) GetMessageAggregateSignature(ctx context.Context, messageID ids.ID, quorumNum uint64, subnetIDStr string) (*ResultGetAggregatedSignature, error) {
+	res := new(ResultGetAggregatedSignature)
 	if _, err := c.Call(ctx, "warp_get_message_aggregate_signature",
 		map[string]interface{}{
 			"messageID":   messageID,
@@ -101,8 +103,8 @@ func (c *client) GetBlockSignature(ctx context.Context, blockID ids.ID) (*Result
 	return &res, nil
 }
 
-func (c *client) GetBlockAggregateSignature(ctx context.Context, blockID ids.ID, quorumNum uint64, subnetIDStr string) ([]byte, error) {
-	var res tmbytes.HexBytes
+func (c *client) GetBlockAggregateSignature(ctx context.Context, blockID ids.ID, quorumNum uint64, subnetIDStr string) (*ResultGetAggregatedSignature, error) {
+	res := new(ResultGetAggregatedSignature)
 	if _, err := c.Call(ctx, "warp_get_block_aggregate_signature",
 		map[string]interface{}{
 			"blockID":     blockID,

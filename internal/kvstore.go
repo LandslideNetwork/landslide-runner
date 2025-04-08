@@ -5,11 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	validatorstatepb "github.com/ava-labs/avalanchego/proto/pb/validatorstate"
+	"github.com/ava-labs/avalanchego/snow/validators/gvalidators"
+	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/vms/platformvm/warp/payload"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"io/ioutil"
 	"net/http"
 	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/vms/platformvm/warp"
 
 	"github.com/ava-labs/avalanchego/utils/logging"
@@ -18,23 +24,36 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	WarpQuorumNumerator   = 67
+	WarpQuorumDenominator = 100
+)
+
 var httpClient = http.DefaultClient
 
 // RunKVStoreTests runs the key value store tests
-func RunKVStoreTests(rpcAddr string, networkID uint32, chainID ids.ID, secretKey *bls.SecretKey, log logging.Logger) {
-	c, err := rpchttp.New(rpcAddr, "/websocket")
+func RunKVStoreTests(rpcAddrList []string, networkID uint32, chainID ids.ID, log logging.Logger) {
+	c, err := rpchttp.New(rpcAddrList[0], "/websocket")
 	if err != nil {
 		log.Fatal("error creating client", zap.Error(err)) //nolint:gocritic
 	}
-	warpClient, err := NewClient(rpcAddr)
+	warpClients := make([]Client, len(rpcAddrList))
+	for i, rpcAddr := range rpcAddrList {
+		warpClients[i], err = NewClient(rpcAddr)
+		if err != nil {
+			log.Fatal("error creating rpc client", zap.Error(err)) //nolint:gocritic
+		}
+	}
 	<-time.After(2 * time.Second) // wait for first block to be committed
 
-	CheckTX(c, log)
+	////CheckTX(c, log)
 	Info(c, log)
 	Query(c, log)
 	Commit(c, log)
-	WARPGetMessage(warpClient, networkID, chainID, log)
-	WARPGetMessageSignature(warpClient, networkID, chainID, secretKey, log)
+	//P2PAppRequest(c, log)
+	WARPGetMessage(warpClients[0], networkID, chainID, log)
+	WARPGetMessageSignature(warpClients[0], networkID, chainID, log)
+	WarpGetMessageAggregateSignature(rpcAddrList[0], c, warpClients, networkID, chainID, log)
 
 	GenerateTXSAsync(c, log, 200)
 }
@@ -240,6 +259,73 @@ func Commit(c *rpchttp.HTTP, log logging.Logger) {
 	log.Info("Commit success")
 }
 
+// P2PAppRequest
+func P2PAppRequest(c *rpchttp.HTTP, log logging.Logger) {
+	// get the current status
+	s, err := c.Status(context.Background())
+	if err != nil {
+		log.Fatal("error Status", zap.Error(err))
+		return
+	}
+
+	log.Info("got status", zap.Any("status", s))
+
+	height := s.SyncInfo.LatestBlockHeight
+
+	// Create a transaction
+	_, _, tx := MakeTxKV()
+
+	_, err = c.BroadcastTxCommit(context.Background(), tx)
+	if err != nil {
+		log.Fatal("BroadcastTxSync error", zap.Error(err))
+		return
+	}
+
+	nextHeight := height + 1
+	commit, err := c.Commit(context.Background(), &nextHeight)
+	if err != nil {
+		log.Fatal("error Commit", zap.Error(err))
+		return
+	}
+	if commit.Commit == nil {
+		log.Fatal("Commit failed")
+		return
+	}
+
+	// get block info
+	block, err := c.Block(context.Background(), &nextHeight)
+	if err != nil {
+		log.Fatal("error Block", zap.Error(err))
+		return
+	}
+	if !(len(block.Block.Header.AppHash) > 0) {
+		log.Fatal("Block failed")
+		return
+	}
+	if !bytes.Equal(block.Block.Header.AppHash.Bytes(), commit.Header.AppHash.Bytes()) {
+		log.Fatal("Block failed")
+		return
+	}
+	if nextHeight != block.Block.Header.Height {
+		log.Fatal("Block height does not match")
+		return
+	}
+
+	// get the previous commit
+	previousHeight := nextHeight - 1
+	commitLast, err := c.Commit(context.Background(), &previousHeight)
+	if err != nil {
+		log.Fatal("error Commit", zap.Error(err))
+		return
+	}
+	if !bytes.Equal(block.Block.LastCommitHash, commitLast.Commit.Hash()) {
+		log.Fatal("Commit failed")
+		return
+	}
+
+	log.Info("Commit success")
+}
+
 func WARPGetMessage(warpClient Client, networkID uint32, chainID ids.ID, log logging.Logger) {
 	msg, err := warp.NewUnsignedMessage(networkID, chainID, []byte(bftrand.Str(24)))
 	if err != nil {
@@ -285,7 +371,7 @@ func WARPGetMessage(warpClient Client, networkID uint32, chainID ids.ID, log log
 	log.Info("AddMessage result", zap.String("response body", resultAddMsg.MessageID))
 }
 
-func WARPGetMessageSignature(warpClient Client, networkID uint32, chainID ids.ID, secretKey *bls.SecretKey, log logging.Logger) {
+func WARPGetMessageSignature(warpClient Client, networkID uint32, chainID ids.ID, log logging.Logger) {
 	msg, err := warp.NewUnsignedMessage(networkID, chainID, []byte(bftrand.Str(24)))
 	if err != nil {
 		log.Fatal("failed to create unsigned message", zap.Error(err))
@@ -307,18 +393,192 @@ func WARPGetMessageSignature(warpClient Client, networkID uint32, chainID ids.ID
 		log.Fatal("failed to warp get message", zap.Error(err))
 		return
 	}
-	warpSigner := warp.NewSigner(secretKey, networkID, chainID)
-	expectedMsgSignature, err := warpSigner.Sign(msg)
-	if err != nil {
-		log.Fatal("failed to sign message", zap.Error(err))
-		return
-	}
-	if !bytes.Equal(resultMsgSignature.Signature, expectedMsgSignature) {
-		log.Info("warp_get_message_signature", zap.String("value", string(resultMsgSignature.Signature)), zap.String("expected", string(expectedMsgSignature)))
-		log.Fatal("warp_get_message returned value does not match sent value")
-		return
-	}
+	log.Info("msg signature", zap.String("signature", string(resultMsgSignature.Signature)))
+	////collect public Keys if possible and try to decode aggregated signature
+	//warpSigner := warp.NewSigner(secretKey, networkID, chainID)
+	//expectedMsgSignature, err := warpSigner.Sign(msg)
+	//if err != nil {
+	//	log.Fatal("failed to sign message", zap.Error(err))
+	//	return
+	//}
+	//if !bytes.Equal(resultMsgSignature.Signature, expectedMsgSignature) {
+	//	log.Info("warp_get_message_signature", zap.String("value", string(resultMsgSignature.Signature)), zap.String("expected", string(expectedMsgSignature)))
+	//	log.Fatal("warp_get_message returned value does not match sent value")
+	//	return
+	//}
 }
+
+// P2PAppRequest
+func WarpGetMessageAggregateSignature(serverAddr string, httpClient *rpchttp.HTTP, warpClients []Client, networkID uint32, chainID ids.ID, log logging.Logger) {
+	vmServerAddr, err := ioutil.ReadFile("/tmp/vm_server_address")
+	if err != nil {
+		panic(err)
+	}
+	clientConn, err := grpc.NewClient(
+		"passthrough:///"+string(vmServerAddr),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	validatorStateClient := gvalidators.NewClient(validatorstatepb.NewValidatorStateClient(clientConn))
+	ready := false
+	for !ready {
+		height, err := validatorStateClient.GetCurrentHeight(context.Background())
+		if err != nil {
+			log.Fatal("failed to get current height", zap.Error(err))
+			return
+		}
+		subnetID, err := validatorStateClient.GetSubnetID(context.Background(), chainID)
+		if err != nil {
+			log.Fatal("failed to get subnet ID", zap.Error(err))
+			return
+		}
+		vdrSet, err := validatorStateClient.GetValidatorSet(context.Background(), height, subnetID)
+		if len(vdrSet) == 5 {
+			ready = true
+		} else {
+			time.Sleep(time.Second * 5)
+		}
+	}
+
+	addressedCall, err := payload.NewAddressedCall(
+		utils.RandomBytes(20),
+		[]byte(bftrand.Str(24)),
+	)
+	if err != nil {
+		log.Fatal("failed to initialize addressed call", zap.Error(err))
+		return
+	}
+
+	msg, err := warp.NewUnsignedMessage(networkID, chainID, addressedCall.Bytes())
+	if err != nil {
+		log.Fatal("failed to create unsigned message", zap.Error(err))
+		return
+	}
+	err = msg.Initialize()
+	if err != nil {
+		log.Fatal("failed to initialize unsigned message", zap.Error(err))
+		return
+	}
+	for _, warpClient := range warpClients {
+		resultAddMsg, err := warpClient.AddMessage(context.Background(), msg.Bytes())
+		if err != nil {
+			log.Fatal("failed to warp add message", zap.Error(err))
+			return
+		}
+		log.Info("AddMessage result", zap.String("response body", resultAddMsg.MessageID))
+	}
+
+	subnetID := "2c1CbR7FGYdeFPB4WaeWphHZrChLH7TQ92FRW6U4mCWTnaxVsB"
+	resultMsgSignature, err := warpClients[0].GetMessageAggregateSignature(context.Background(), msg.ID(), WarpQuorumNumerator, subnetID)
+	if err != nil {
+		log.Fatal("failed to warp get message", zap.Error(err))
+		return
+	}
+	resultMsg, err := warp.ParseMessage(resultMsgSignature.Message)
+	if err != nil {
+		log.Fatal("failed to parse message", zap.Error(err))
+		return
+	}
+	// get the current status
+	s, err := httpClient.Status(context.Background())
+	if err != nil {
+		log.Fatal("error Status", zap.Error(err))
+		return
+	}
+
+	log.Info("got status", zap.Any("status", s))
+
+	//height := s.SyncInfo.LatestBlockHeight
+	log.Info("Server Address initial:", zap.String("addr", serverAddr))
+	log.Info("Server Address changed:", zap.String("addr", serverAddr[7:]))
+	//vmServerAddr, err := ioutil.ReadFile("/tmp/vm_server_address")
+	//if err != nil {
+	//	panic(err)
+	//}
+	//clientConn, err := grpc.NewClient(
+	//	"passthrough:///"+string(vmServerAddr),
+	//	grpc.WithTransportCredentials(insecure.NewCredentials()),
+	//)
+	//validatorStateClient := gvalidators.NewClient(validatorstatepb.NewValidatorStateClient(clientConn))
+	height, err := validatorStateClient.GetCurrentHeight(context.Background())
+	if err != nil {
+		log.Fatal("failed to get current height", zap.Error(err))
+		return
+	}
+	err = resultMsg.Signature.Verify(context.Background(), &resultMsg.UnsignedMessage, networkID, validatorStateClient, height, WarpQuorumNumerator, WarpQuorumDenominator)
+	//err := VerifyBls([]byte{}, resultMsgSignature.AggregatedSignatures, msg.Bytes(), validators, quorumNum, quorumDen)
+	if err != nil {
+		log.Fatal("failed to verify warp aggregated signature", zap.Error(err))
+		return
+	}
+	//warpSigner := warp.NewSigner(secretKey, networkID, chainID)
+	//expectedMsgSignature, err := warpSigner.Sign(msg)
+	//if err != nil {
+	//	log.Fatal("failed to sign message", zap.Error(err))
+	//	return
+	//}
+	//if !bytes.Equal(resultMsgSignature.AggregatedSignatures, expectedMsgSignature) {
+	//	log.Info("warp_get_message_signature", zap.String("value", string(resultMsgSignature.AggregatedSignatures)), zap.String("expected", string(expectedMsgSignature)))
+	//	log.Fatal("warp_get_message returned value does not match sent value")
+	//	return
+	//}
+}
+
+//// VerifyBls verifies bls signature and check signers weight by quorumNum/quorumDen ratio
+//func VerifyBls(
+//	signersInput []byte, // header
+//	signature [bls.SignatureLen]byte, //  (1 - signed_storage_root; 2 - signed_validator_set)
+//	data []byte, // payload (1 - storage root; 2 - validater set)
+//	vdrs []*warp.Validator, // header
+//	totalWeight uint64, // header
+//	quorumNum uint64, // cs
+//	quorumDen uint64, // cs
+//) error {
+//	//// Parse signer bit vector
+//	////
+//	//// We assert that the length of [signerIndices.Bytes()] is equal
+//	//// to [len(s.Signers)] to ensure that [s.Signers] does not have
+//	//// any unnecessary zero-padding to represent the [set.Bits].
+//	//signerIndices := set.BitsFromBytes(signersInput)
+//	//if len(signerIndices.Bytes()) != len(signersInput) {
+//	//	return fmt.Errorf("bitset is invalid")
+//	//}
+//
+//	// Get the validators that (allegedly) signed the message.
+//	signers, err := warp.FilterValidators(signerIndices, vdrs)
+//	if err != nil {
+//		return err
+//	}
+//
+//	// Because [signers] is a subset of [vdrs], this can never error.
+//	sigWeight, _ := warp.SumWeight(signers)
+//
+//	// Make sure the signature's weight is sufficient.
+//	err = warp.VerifyWeight(
+//		sigWeight,
+//		totalWeight,
+//		quorumNum,
+//		quorumDen,
+//	)
+//	if err != nil {
+//		return err
+//	}
+//
+//	// Parse the aggregate signature
+//	aggSig, err := bls.SignatureFromBytes(signature[:])
+//	if err != nil {
+//		return fmt.Errorf("failed to parse signature: %v", err)
+//	}
+//	// Create the aggregate public key
+//	aggPubKey, err := warp.AggregatePublicKeys(signers)
+//	if err != nil {
+//		return err
+//	}
+//
+//	if !bls.Verify(aggPubKey, aggSig, data) {
+//		return fmt.Errorf("signature is invalid")
+//	}
+//	return nil
+//}
 
 func Query(c *rpchttp.HTTP, log logging.Logger) {
 	log.Info("Querying the key value store")
