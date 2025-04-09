@@ -59,7 +59,7 @@ func RunKVStoreTests(rpcAddrList []string, networkID uint32, chainID ids.ID, log
 	Commit(c, log)
 	WARPGetMessage(warpClients[0], networkID, chainID, log)
 	WARPGetMessageSignature(hostPort, warpClients[0], networkID, chainID, log)
-	WarpGetMessageAggregateSignature(rpcAddrList[0], c, warpClients, networkID, chainID, log)
+	WarpGetMessageAggregateSignature(c, warpClients, networkID, chainID, log)
 
 	GenerateTXSAsync(c, log, 200)
 }
@@ -372,7 +372,7 @@ func WARPGetMessageSignature(rpcURI string, warpClient Client, networkID uint32,
 	log.Info("msg signature", zap.String("signature", string(resultMsgSignature.Signature)))
 }
 
-func WarpGetMessageAggregateSignature(serverAddr string, httpClient *rpchttp.HTTP, warpClients []Client, networkID uint32, chainID ids.ID, log logging.Logger) {
+func WarpGetMessageAggregateSignature(httpClient *rpchttp.HTTP, warpClients []Client, networkID uint32, chainID ids.ID, log logging.Logger) {
 	vmServerAddr, err := ioutil.ReadFile("/tmp/vm_server_address")
 	if err != nil {
 		panic(err)
@@ -450,8 +450,6 @@ func WarpGetMessageAggregateSignature(serverAddr string, httpClient *rpchttp.HTT
 
 	log.Info("got status", zap.Any("status", s))
 
-	log.Info("Server Address initial:", zap.String("addr", serverAddr))
-	log.Info("Server Address changed:", zap.String("addr", serverAddr[7:]))
 	height, err := validatorStateClient.GetCurrentHeight(context.Background())
 	if err != nil {
 		log.Fatal("failed to get current height", zap.Error(err))
