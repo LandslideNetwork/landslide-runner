@@ -11,6 +11,7 @@ import (
 	"github.com/ava-labs/avalanche-network-runner/local"
 	"github.com/ava-labs/avalanche-network-runner/network"
 	"github.com/ava-labs/avalanchego/config"
+	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/cometbft/cometbft/libs/json"
 	"github.com/urfave/cli/v2"
@@ -36,6 +37,12 @@ var (
 	//go:embed data/testdata/nameservice.wasm.hex
 	nameserviceDeployHex string
 )
+
+type NodesConfiguration struct {
+	RPCs      []string
+	ChainID   ids.ID
+	NodeNames []string
+}
 
 func main() {
 	// Create the logger
@@ -69,7 +76,7 @@ func main() {
 						Action: func(cCtx *cli.Context) error {
 							nw, err := createNetwork(log, binaryPath, workDir)
 							if err != nil {
-								fmt.Println(err)
+								log.Fatal("failed to create network", zap.Error(err))
 								os.Exit(1)
 							}
 							_, err = runNodes(log, binaryPath, genesisKvStore, nw)
@@ -88,7 +95,7 @@ func main() {
 						Action: func(cCtx *cli.Context) error {
 							nw, err := createNetwork(log, binaryPath, workDir)
 							if err != nil {
-								fmt.Println(err)
+								log.Fatal("failed to create network", zap.Error(err))
 								os.Exit(1)
 							}
 							_, err = runNodes(log, binaryPath, genesisWasm, nw)
@@ -113,7 +120,7 @@ func main() {
 						Action: func(cCtx *cli.Context) error {
 							nw, err := createNetwork(log, binaryPath, workDir)
 							if err != nil {
-								fmt.Println(err)
+								log.Fatal("failed to create network", zap.Error(err))
 								os.Exit(1)
 							}
 							defer func() {
@@ -122,17 +129,21 @@ func main() {
 								}
 							}()
 
-							rpcs, err := runNodes(log, binaryPath, genesisKvStore, nw)
+							cfg, err := runNodes(log, binaryPath, genesisKvStore, nw)
 							if err != nil {
 								log.Fatal("error starting nodes", zap.Error(err))
 								return cli.Exit("exiting", 1)
 							}
-							if len(rpcs) == 0 {
+							if len(cfg.RPCs) == 0 {
 								log.Fatal("no rpcs")
 								return cli.Exit("exiting", 1)
 							}
-
-							internal.RunKVStoreTests(rpcs[0], log)
+							networkID, err := nw.GetNetworkID()
+							if err != nil {
+								log.Fatal("failed to get network ID", zap.Error(err))
+								os.Exit(1)
+							}
+							internal.RunKVStoreTests(cfg.RPCs, networkID, cfg.ChainID, log)
 							return nil
 						},
 					},
@@ -142,22 +153,22 @@ func main() {
 						Action: func(cCtx *cli.Context) error {
 							nw, err := createNetwork(log, binaryPath, workDir)
 							if err != nil {
-								fmt.Println(err)
+								log.Fatal("failed to create network", zap.Error(err))
 								os.Exit(1)
 							}
-							rpcs, err := runNodes(log, binaryPath, genesisWasm, nw)
+							cfg, err := runNodes(log, binaryPath, genesisWasm, nw)
 							if err != nil {
 								log.Fatal("error starting nodes", zap.Error(err))
 								return cli.Exit("exiting", 1)
 							}
 
-							if len(rpcs) == 0 {
+							if len(cfg.RPCs) == 0 {
 								log.Fatal("no rpcs")
 								return cli.Exit("exiting", 1)
 							}
 
 							internal.RunWASMTests(
-								rpcs,
+								cfg.RPCs,
 								log,
 								nameserviceDeployHex,
 							)
@@ -185,7 +196,7 @@ func main() {
 	}
 }
 
-func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.Network) ([]string, error) {
+func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.Network) (*NodesConfiguration, error) {
 	// Wait until the nodes in the network are ready
 	if err := internal.Await(nw, log, healthyTimeout); err != nil {
 		return nil, err
@@ -203,6 +214,7 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 
 	perNodeChainConfig := make(map[string][]byte)
 	grpcPort := defaultGrpcPort
+
 	for i := range nodeNames {
 		node, err := nw.GetNode(nodeNames[i])
 		if err != nil {
@@ -273,7 +285,13 @@ func runNodes(log logging.Logger, binaryPath string, genesis []byte, nw network.
 		grpcPort++
 	}
 
-	return rpcUrls, nil
+	cfg := &NodesConfiguration{
+		RPCs:      rpcUrls,
+		ChainID:   chains[0],
+		NodeNames: nodeNames,
+	}
+
+	return cfg, nil
 }
 
 func createNetwork(log logging.Logger, binaryPath string, workDir string) (network.Network, error) {
