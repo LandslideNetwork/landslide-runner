@@ -64,9 +64,30 @@ func RunKVStoreTests(rpcAddrList []string, networkID uint32, chainID ids.ID, log
 	GenerateTXSAsync(c, log, 200)
 }
 
+func getActualHeight(c *rpchttp.HTTP, log logging.Logger) (int64, error) {
+	// We need to check the current height to track block acceptance process
+	resBc, err := c.BlockchainInfo(context.Background(), 0, 0)
+	if err != nil {
+		log.Fatal("error BlockchainInfo", zap.Error(err))
+		return -1, err
+	}
+	if len(resBc.BlockMetas) == 0 {
+		log.Fatal("BlockchainInfo failed")
+		return -1, err
+	}
+	return resBc.LastHeight, err
+}
+
 // GenerateTXSAsync generates num transactions asynchronously
 // and waits for them to be committed
 func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int) {
+	// We need to check the current height to track block acceptance process
+	actualHeight, err := getActualHeight(c, log)
+	if err != nil {
+		return
+	}
+	log.Info("Actual blockchain height", zap.Int64("actualHeight", actualHeight))
+
 	type KV struct {
 		k []byte
 		v []byte
@@ -95,27 +116,58 @@ func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int) {
 		// wait for 100 milliseconds
 		<-time.After(100 * time.Millisecond)
 	}
-	// wait for 15 seconds to let the transactions be committed
-	<-time.After(15 * time.Second)
-
-	// 30 attempts to query the key value store with delay of 5 seconds
-	for j := 0; j < 30; j++ {
-		if len(kvs) == 0 {
-			log.Info("All transactions are committed")
-			break
+	// wait for new block acceptance to let the transactions be committed
+	newHeight, err := getActualHeight(c, log)
+	if err != nil {
+		return
+	}
+	for newHeight == actualHeight {
+		time.Sleep(time.Second)
+		newHeight, err = getActualHeight(c, log)
+		if err != nil {
+			return
 		}
+	}
+	actualHeight = newHeight
+	log.Info("Actual blockchain height", zap.Int64("actualHeight", actualHeight))
 
-		for i := 0; i < len(kvs); i++ {
-			err := ABCIQuery(c, log, kvs[i].k, kvs[i].v)
+	for i := 0; i < len(kvs); i++ {
+		err := ABCIQuery(c, log, kvs[i].k, kvs[i].v)
+		if err != nil {
+			log.Fatal("ABCIQuery failed", zap.Error(err))
+			log.Info("Start waiting for a new block")
+			waitingStartedAt := time.Now()
+			// wait for block acceptance
+			newHeight, err = getActualHeight(c, log)
 			if err != nil {
-				// wait for 5 seconds for block acceptance
-				<-time.After(5 * time.Second)
-				break
+				log.Fatal("Failed to query actual blockchain height", zap.Error(err))
+				return
 			}
-			// remove the key value pair
-			kvs = append(kvs[:i], kvs[i+1:]...)
+			log.Info("Height Comparison", zap.Int64("actual height", newHeight), zap.Int64("previous height", actualHeight))
+			for newHeight == actualHeight {
+				time.Sleep(time.Second)
+				newHeight, err = getActualHeight(c, log)
+				if err != nil {
+					log.Fatal("Failed to query actual blockchain height", zap.Error(err))
+					return
+				}
+			}
+			actualHeight = newHeight
+			log.Info("Actual blockchain height", zap.Int64("actualHeight", actualHeight))
+			waitingFinishedAt := time.Now()
+			log.Info("Test Waited for Txs to be commited for: ", zap.Float64("waiting period(seconds)", waitingFinishedAt.Sub(waitingStartedAt).Seconds()))
 			i--
+			log.Info("Send ABCIQuery request again")
+			continue
 		}
+		// remove the key value pair
+		kvs = append(kvs[:i], kvs[i+1:]...)
+		i--
+	}
+	if len(kvs) == 0 {
+		log.Info("All transactions are committed")
+	} else {
+		log.Error("Test Failed")
 	}
 }
 
@@ -123,23 +175,18 @@ func GenerateTXSAsync(c *rpchttp.HTTP, log logging.Logger, num int) {
 func ABCIQuery(c *rpchttp.HTTP, log logging.Logger, k, v []byte) error {
 	abcires, err := c.ABCIQuery(context.Background(), "/key", k)
 	if err != nil {
-		log.Fatal("ABCIQuery failed", zap.Error(err))
 		return err
 	}
 	if abcires.Response.IsErr() {
-		log.Fatal("ABCIQuery failed")
-		return errors.New("ABCIQuery failed")
+		return fmt.Errorf("ABCIQuery Response Code is %d", abcires.Response.Code)
 	}
 	if !bytes.Equal(abcires.Response.Key, k) {
-		log.Fatal("ABCIQuery returned key does not match queried key")
 		return errors.New("ABCIQuery returned key does not match queried key")
 	}
 	if !bytes.Equal(abcires.Response.Value, v) {
-		log.Info("ABCIQuery", zap.String("value", string(abcires.Response.Value)), zap.String("expected", string(v)))
-		log.Fatal("ABCIQuery returned value does not match sent value")
-		return errors.New("ABCIQuery returned value does not match sent value")
+		return fmt.Errorf("ABCIQuery returned value does not match sent value. Key: %s, Value: %s, Expected Value: %s", string(k), string(abcires.Response.Value), string(v))
 	}
-	log.Info("ABCIQuery success", zap.String("resp", string(abcires.Response.Key)), zap.String("value", string(abcires.Response.Value)))
+	log.Info("ABCIQuery success", zap.String("key", string(k)), zap.String("value", string(abcires.Response.Value)), zap.String("expected value", string(v)))
 
 	return nil
 }
@@ -165,13 +212,6 @@ func CheckTX(c *rpchttp.HTTP, log logging.Logger) {
 }
 
 func Info(c *rpchttp.HTTP, log logging.Logger) {
-	res, err := c.NetInfo(context.Background())
-	if err != nil {
-		log.Fatal("error NetInfo", zap.Error(err))
-		return
-	}
-	log.Info("NetInfo success", zap.Any("res", res))
-
 	resABCI, err := c.ABCIInfo(context.Background())
 	if err != nil {
 		log.Fatal("error ABCIInfo", zap.Error(err))
